@@ -17,6 +17,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthReady: boolean;
+  loading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   register: (username: string, password: string, role: string) => Promise<boolean>;
@@ -100,6 +101,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const value: AuthContextType = {
     user,
     isAuthReady,
+    loading: isDbLoading,
     login,
     logout,
     register,

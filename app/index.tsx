@@ -5,42 +5,22 @@ import { useAuth } from '../context/AuthContext';
 import { Redirect } from 'expo-router';
 import { Colors, Typography, Spacing } from '../theme/theme';
 import { FontAwesome5 } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeInUp, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
 
 export default function IndexScreen() {
-  const { user, loading } = useAuth();
-  
-  const rotation = useSharedValue(0);
+  const { user, loading, isAuthReady } = useAuth();
 
-  useEffect(() => {
-    rotation.value = withRepeat(
-      withTiming(360, { duration: 2000 }),
-      -1,
-      false
-    );
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ rotate: `${rotation.value}deg` }],
-    };
-  });
-
-  if (loading) {
+  if (!isAuthReady || loading) {
     return (
       <View style={styles.container}>
-        <Animated.View 
-          entering={FadeIn.duration(500)}
-          style={styles.loadingContainer}
-        >
-          <Animated.View style={[styles.logoContainer, animatedStyle]}>
+        <View style={styles.loadingContainer}>
+          <View style={styles.logoContainer}>
             <FontAwesome5 name="building" size={48} color={Colors.primary} />
-          </Animated.View>
-          <Animated.View entering={FadeInUp.delay(300)}>
+          </View>
+          <View>
             <Text style={styles.title}>Leave Management</Text>
             <Text style={styles.subtitle}>Loading your workspace...</Text>
-          </Animated.View>
-        </Animated.View>
+          </View>
+        </View>
       </View>
     );
   }
@@ -51,6 +31,44 @@ export default function IndexScreen() {
 
   return <Redirect href="/(auth)/login" />;
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+    elevation: 4,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
