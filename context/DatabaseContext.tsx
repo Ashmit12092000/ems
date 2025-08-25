@@ -41,18 +41,23 @@ export const DatabaseProvider = ({ children }: DatabaseProviderProps) => {
         // Only open the database if the instance doesn't exist
         if (!dbInstance) {
             console.log("Opening new database connection...");
-            dbInstance = SQLite.openDatabaseSync('leave_management.db');
-            
-            await dbInstance.execAsync(`
-              PRAGMA journal_mode = WAL;
-              CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('Employee', 'HOD')));
-              CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT NOT NULL, date TEXT NOT NULL, reason TEXT, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')), FOREIGN KEY (user_id) REFERENCES users(id));
-              CREATE TABLE IF NOT EXISTS monthly_limits (limit_type TEXT PRIMARY KEY, value INTEGER NOT NULL);
-              CREATE TABLE IF NOT EXISTS duty_roster (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, date TEXT NOT NULL, shift_type TEXT, FOREIGN KEY (user_id) REFERENCES users(id));
-              CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, date TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('Present', 'Absent', 'Leave')), UNIQUE(user_id, date), FOREIGN KEY (user_id) REFERENCES users(id));
-              CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
-            `);
-            console.log("Database initialized successfully.");
+            try {
+              dbInstance = await SQLite.openDatabaseAsync('leave_management.db');
+              
+              await dbInstance.execAsync(`
+                PRAGMA journal_mode = WAL;
+                CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('Employee', 'HOD')));
+                CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT NOT NULL, date TEXT NOT NULL, reason TEXT, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')), FOREIGN KEY (user_id) REFERENCES users(id));
+                CREATE TABLE IF NOT EXISTS monthly_limits (limit_type TEXT PRIMARY KEY, value INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS duty_roster (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, date TEXT NOT NULL, shift_type TEXT, FOREIGN KEY (user_id) REFERENCES users(id));
+                CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, date TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('Present', 'Absent', 'Leave')), UNIQUE(user_id, date), FOREIGN KEY (user_id) REFERENCES users(id));
+                CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
+              `);
+              console.log("Database initialized successfully.");
+            } catch (dbError) {
+              console.error("Database connection/initialization error:", dbError);
+              throw dbError;
+            }
         } else {
             console.log("Using existing database connection.");
         }
