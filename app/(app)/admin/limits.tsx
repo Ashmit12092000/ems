@@ -1,98 +1,302 @@
-// File: app/(app)/admin/limits.tsx
-// Screen for HODs to set monthly request limits.
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import { useDatabase } from '../../../context/DatabaseContext';
+import { Colors, Typography, Spacing, BorderRadius } from '../../../theme/theme';
+import { FontAwesome5 } from '@expo/vector-icons';
+import { ModernCard } from '../../../components/ui/ModernCard';
+import { ModernInput } from '../../../components/ui/ModernInput';
+import { ModernButton } from '../../../components/ui/ModernButton';
+import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 
-export default function LimitsScreen() {
-  const { db } = useDatabase();
-  const [leaveLimit, setLeaveLimit] = useState('');
+interface MonthlyLimit {
+  limit_type: string;
+  value: number;
+}
 
-  const fetchCurrentLimit = useCallback(async () => {
-    if (!db) return;
-    try {
-      const result = await db.getFirstAsync<{ value: number }>(
-        'SELECT value FROM monthly_limits WHERE limit_type = ?;',
-        'leave'
-      );
-      if (result) {
-        setLeaveLimit(result.value.toString());
-      }
-    } catch (error) {
-      console.error('Error fetching limit:', error);
-    }
-  }, [db]);
+export default function MonthlyLimitsScreen() {
+  const { database } = useDatabase();
+  const [limits, setLimits] = useState<{[key: string]: string}>({
+    leave: '',
+    permission: '',
+    shift: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   useEffect(() => {
-    fetchCurrentLimit();
-  }, [fetchCurrentLimit]);
+    loadLimits();
+  }, []);
 
-  const handleSetLimit = async () => {
-    if (!db) return;
-    if (!leaveLimit || isNaN(parseInt(leaveLimit))) {
-      Alert.alert('Error', 'Please enter a valid number for the limit.');
-      return;
-    }
+  const loadLimits = async () => {
+    if (!database) return;
+
     try {
-      await db.runAsync(
-        'REPLACE INTO monthly_limits (limit_type, value) VALUES (?, ?);',
-        'leave',
-        parseInt(leaveLimit)
-      );
-      Alert.alert('Success', 'Monthly leave limit has been updated.');
+      const result = await database.getAllAsync('SELECT * FROM monthly_limits') as MonthlyLimit[];
+      const limitsData = result.reduce((acc, item) => {
+        acc[item.limit_type] = item.value.toString();
+        return acc;
+      }, {} as {[key: string]: string});
+
+      setLimits(prevLimits => ({
+        ...prevLimits,
+        ...limitsData,
+      }));
     } catch (error) {
-      console.error('Error setting limit:', error);
-      Alert.alert('Error', 'Failed to set the limit.');
+      console.error('Error loading limits:', error);
+      Alert.alert('Error', 'Failed to load monthly limits');
     }
   };
 
+  const validateLimits = () => {
+    const newErrors: {[key: string]: string} = {};
+    
+    Object.entries(limits).forEach(([key, value]) => {
+      const numValue = parseInt(value);
+      if (!value.trim()) {
+        newErrors[key] = 'This field is required';
+      } else if (isNaN(numValue) || numValue < 0) {
+        newErrors[key] = 'Must be a positive number';
+      } else if (numValue > 31) {
+        newErrors[key] = 'Cannot exceed 31 days';
+      }
+    });
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const saveLimits = async () => {
+    if (!validateLimits()) return;
+    if (!database) return;
+
+    setLoading(true);
+    try {
+      for (const [limitType, value] of Object.entries(limits)) {
+        await database.runAsync(
+          'INSERT OR REPLACE INTO monthly_limits (limit_type, value) VALUES (?, ?)',
+          [limitType, parseInt(value)]
+        );
+      }
+      Alert.alert('Success', 'Monthly limits updated successfully');
+    } catch (error) {
+      console.error('Error saving limits:', error);
+      Alert.alert('Error', 'Failed to save monthly limits');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateLimit = (type: string, value: string) => {
+    setLimits(prev => ({ ...prev, [type]: value }));
+    if (errors[type]) {
+      setErrors(prev => ({ ...prev, [type]: '' }));
+    }
+  };
+
+  const limitTypes = [
+    {
+      key: 'leave',
+      label: 'Leave Days',
+      icon: 'calendar-times',
+      description: 'Maximum leave days per month',
+      color: Colors.primary,
+    },
+    {
+      key: 'permission',
+      label: 'Permission Hours',
+      icon: 'user-clock',
+      description: 'Maximum permission hours per month',
+      color: Colors.secondary,
+    },
+    {
+      key: 'shift',
+      label: 'Shift Changes',
+      icon: 'exchange-alt',
+      description: 'Maximum shift adjustments per month',
+      color: Colors.accent,
+    },
+  ];
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Set Monthly Leave Request Limit:</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g., 2"
-        keyboardType="numeric"
-        value={leaveLimit}
-        onChangeText={setLeaveLimit}
-      />
-      <TouchableOpacity style={styles.button} onPress={handleSetLimit}>
-        <Text style={styles.buttonText}>Save Limit</Text>
-      </TouchableOpacity>
-    </View>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <Animated.View entering={FadeInDown} style={styles.header}>
+        <View style={styles.headerIcon}>
+          <FontAwesome5 name="cogs" size={24} color={Colors.primary} />
+        </View>
+        <Text style={styles.title}>Monthly Limits</Text>
+        <Text style={styles.subtitle}>
+          Configure maximum allowances for employee requests
+        </Text>
+      </Animated.View>
+
+      <View style={styles.content}>
+        {limitTypes.map((limitType, index) => (
+          <Animated.View 
+            key={limitType.key}
+            entering={FadeInUp.delay(index * 100)}
+          >
+            <ModernCard style={styles.limitCard}>
+              <View style={styles.limitHeader}>
+                <View style={[styles.limitIcon, { backgroundColor: limitType.color + '15' }]}>
+                  <FontAwesome5 name={limitType.icon} size={20} color={limitType.color} />
+                </View>
+                <View style={styles.limitInfo}>
+                  <Text style={styles.limitLabel}>{limitType.label}</Text>
+                  <Text style={styles.limitDescription}>{limitType.description}</Text>
+                </View>
+              </View>
+              
+              <ModernInput
+                value={limits[limitType.key]}
+                onChangeText={(value) => updateLimit(limitType.key, value)}
+                placeholder="Enter limit"
+                keyboardType="numeric"
+                error={errors[limitType.key]}
+                rightIcon="hashtag"
+              />
+            </ModernCard>
+          </Animated.View>
+        ))}
+
+        <Animated.View entering={FadeInUp.delay(400)}>
+          <ModernCard style={styles.summaryCard}>
+            <View style={styles.summaryHeader}>
+              <FontAwesome5 name="chart-bar" size={18} color={Colors.primary} />
+              <Text style={styles.summaryTitle}>Current Settings</Text>
+            </View>
+            <View style={styles.summaryContent}>
+              {limitTypes.map((limitType) => (
+                <View key={limitType.key} style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>{limitType.label}:</Text>
+                  <Text style={styles.summaryValue}>
+                    {limits[limitType.key] || '0'} {limitType.key === 'permission' ? 'hours' : limitType.key === 'shift' ? 'changes' : 'days'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </ModernCard>
+        </Animated.View>
+
+        <Animated.View entering={FadeInUp.delay(500)} style={styles.buttonContainer}>
+          <ModernButton
+            title="Save Limits"
+            onPress={saveLimits}
+            loading={loading}
+            variant="primary"
+            leftIcon="save"
+          />
+        </Animated.View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.background,
   },
-  label: {
-    fontSize: 16,
-    marginBottom: 10,
-    color: '#333',
-  },
-  input: {
-    height: 50,
-    borderColor: '#ddd',
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 20,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-  },
-  button: {
-    backgroundColor: '#007bff',
-    padding: 15,
-    borderRadius: 8,
+  header: {
     alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+  headerIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xxl,
+  },
+  limitCard: {
+    marginBottom: Spacing.lg,
+  },
+  limitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  limitIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  limitInfo: {
+    flex: 1,
+  },
+  limitLabel: {
+    ...Typography.bodyLarge,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+    marginBottom: Spacing.xs,
+  },
+  limitDescription: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+  },
+  summaryCard: {
+    marginBottom: Spacing.lg,
+    backgroundColor: Colors.backgroundSecondary,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  summaryTitle: {
+    ...Typography.bodyLarge,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+    marginLeft: Spacing.sm,
+  },
+  summaryContent: {
+    gap: Spacing.sm,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+  },
+  summaryLabel: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+  },
+  summaryValue: {
+    ...Typography.bodyMedium,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  buttonContainer: {
+    marginTop: Spacing.md,
   },
 });
