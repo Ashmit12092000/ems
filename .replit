@@ -1,11 +1,11 @@
 modules = ["nodejs-20", "nix"]
-run = "npx expo start"
+run = "expo start --tunnel"
 
 [nix]
 channel = "stable-25_05"
 
 [deployment]
-run = ["sh", "-c", "npx expo start"]
+run = ["sh", "-c", "expo start --tunnel"]
 
 [[ports]]
 localPort = 8081
