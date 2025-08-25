@@ -1,140 +1,252 @@
-// File: app/(app)/requests/leave.tsx
-// Updated with a user-friendly date picker instead of a text input.
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal, Button, Platform } from 'react-native';
-import { useAuth } from '../../../context/AuthContext';
+import { View, Text, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useDatabase } from '../../../context/DatabaseContext';
+import { useAuth } from '../../../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { validateRequest, ValidationResult } from '../../../utils/validation';
-import { Colors, Sizing, Typography } from '../../../theme/theme';
 import { FontAwesome5 } from '@expo/vector-icons';
-// Note: For a real app, you'd install this with `npm install @react-native-community/datetimepicker`
-// Expo Go might have a version of this built-in. If not, a custom modal is an alternative.
+import { Colors, Typography, Spacing, BorderRadius } from '../../../theme/theme';
+import { ModernCard } from '../../../components/ui/ModernCard';
+import { ModernButton } from '../../../components/ui/ModernButton';
+import { ModernInput } from '../../../components/ui/ModernInput';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { TouchableOpacity } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 export default function LeaveRequestScreen() {
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [reason, setReason] = useState('');
-  const { user } = useAuth();
   const { db } = useDatabase();
+  const { user } = useAuth();
   const router = useRouter();
-
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || date;
-    setShowDatePicker(Platform.OS === 'ios');
-    setDate(currentDate);
-  };
+  const [date, setDate] = useState(new Date());
+  const [reason, setReason] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    const formattedDate = date.toISOString().split('T')[0];
-    if (!reason) {
-      Alert.alert('Error', 'Please provide a reason for your leave.');
+    if (!reason.trim()) {
+      Alert.alert('Error', 'Please provide a reason for your leave request');
       return;
     }
+
     if (!db || !user) {
-      Alert.alert('Error', 'Database or user not available.');
+      Alert.alert('Error', 'Database connection error');
       return;
     }
+
+    setLoading(true);
 
     try {
-      const validationResult: ValidationResult = await validateRequest(db, user.id, formattedDate);
-      if (!validationResult.passed) {
-          Alert.alert('Validation Failed', validationResult.message);
-          return;
-      }
-
-      await db.runAsync(
-        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?);',
-        user.id, 'leave', formattedDate, reason, 'pending'
-      );
+      const dateString = date.toISOString().split('T')[0];
       
-      Alert.alert('Success', 'Your leave request has been submitted.');
-      router.back();
+      await db.runAsync(
+        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?)',
+        [user.id, 'Leave', dateString, reason, 'pending']
+      );
+
+      // Create notification for admin
+      await db.runAsync(
+        'INSERT INTO notifications (user_id, message) VALUES (?, ?)',
+        [1, `New leave request from ${user.username} for ${dateString}`]
+      );
+
+      Alert.alert('Success', 'Leave request submitted successfully', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
     } catch (error) {
       console.error('Error submitting leave request:', error);
-      Alert.alert('Error', 'Failed to submit request.');
+      Alert.alert('Error', 'Failed to submit leave request');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={Typography.label}>Date of Leave</Text>
-      <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
-        <FontAwesome5 name="calendar-alt" size={16} color={Colors.secondary} />
-        <Text style={styles.datePickerText}>{date.toLocaleDateString()}</Text>
-      </TouchableOpacity>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View entering={FadeInUp.delay(100)} style={styles.header}>
+          <View style={styles.iconContainer}>
+            <FontAwesome5 name="calendar-day" size={32} color={Colors.primary} />
+          </View>
+          <Text style={styles.title}>Leave Request</Text>
+          <Text style={styles.subtitle}>Submit your leave application</Text>
+        </Animated.View>
 
-      {showDatePicker && (
-        <DateTimePicker
-          testID="dateTimePicker"
-          value={date}
-          mode="date"
-          display="default"
-          onChange={onDateChange}
-        />
-      )}
+        <Animated.View entering={FadeInDown.delay(200)}>
+          <ModernCard style={styles.formCard}>
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Leave Date</Text>
+              <TouchableOpacity 
+                style={styles.dateButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <FontAwesome5 name="calendar" size={20} color={Colors.primary} />
+                <Text style={styles.dateText}>{formatDate(date)}</Text>
+                <FontAwesome5 name="chevron-down" size={16} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
 
-      <Text style={Typography.label}>Reason for Leave</Text>
-      <TextInput
-        style={styles.textArea}
-        placeholder="Enter reason..."
-        placeholderTextColor={Colors.lightText}
-        value={reason}
-        onChangeText={setReason}
-        multiline
-      />
-      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Submit Request</Text>
-      </TouchableOpacity>
-    </View>
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Reason for Leave</Text>
+              <ModernInput
+                placeholder="Enter the reason for your leave request..."
+                value={reason}
+                onChangeText={setReason}
+                multiline
+                numberOfLines={4}
+                style={styles.reasonInput}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.infoBox}>
+              <FontAwesome5 name="info-circle" size={20} color={Colors.info} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoTitle}>Request Guidelines</Text>
+                <Text style={styles.infoText}>
+                  • Submit requests at least 24 hours in advance{'\n'}
+                  • Provide a clear and valid reason{'\n'}
+                  • Emergency leaves will be reviewed separately
+                </Text>
+              </View>
+            </View>
+
+            <ModernButton
+              title={loading ? "Submitting..." : "Submit Request"}
+              onPress={handleSubmit}
+              disabled={loading}
+              style={styles.submitButton}
+            />
+          </ModernCard>
+        </Animated.View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            testID="dateTimePicker"
+            value={date}
+            mode="date"
+            display="default"
+            minimumDate={new Date()}
+            onChange={onDateChange}
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: Sizing.padding,
     backgroundColor: Colors.background,
   },
-  datePickerButton: {
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  header: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  formCard: {
+    padding: Spacing.xl,
+  },
+  formSection: {
+    marginBottom: Spacing.xl,
+  },
+  label: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
+  },
+  dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: Sizing.borderRadius,
-    padding: Sizing.padding,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: Sizing.margin,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    justifyContent: 'space-between',
   },
-  datePickerText: {
+  dateText: {
     ...Typography.body,
-    color: Colors.darkText,
-    marginLeft: 10,
+    color: Colors.textPrimary,
+    flex: 1,
+    marginLeft: Spacing.md,
   },
-  textArea: {
-    backgroundColor: Colors.white,
-    borderRadius: Sizing.borderRadius,
-    padding: Sizing.padding,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  reasonInput: {
     minHeight: 120,
-    textAlignVertical: 'top',
-    ...Typography.body,
-    color: Colors.darkText,
+    paddingTop: Spacing.lg,
   },
-  button: {
-    backgroundColor: Colors.primary,
-    padding: 15,
-    borderRadius: Sizing.borderRadius,
-    alignItems: 'center',
-    marginTop: 'auto', // Pushes button to the bottom
-    marginBottom: Sizing.margin,
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: Colors.infoLight,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.info,
   },
-  buttonText: {
-    color: Colors.white,
-    fontWeight: 'bold',
-    fontSize: 16,
+  infoContent: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  infoTitle: {
+    ...Typography.bodyBold,
+    color: Colors.info,
+    marginBottom: Spacing.sm,
+  },
+  infoText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  submitButton: {
+    marginTop: Spacing.lg,
   },
 });

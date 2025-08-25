@@ -1,131 +1,254 @@
-// File: app/(app)/requests/permission.tsx
-// Redesigned with a user-friendly date picker and modern UI.
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
-import { useAuth } from '../../../context/AuthContext';
+import { View, Text, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useDatabase } from '../../../context/DatabaseContext';
+import { useAuth } from '../../../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { Colors, Sizing, Typography } from '../../../theme/theme';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { Colors, Typography, Spacing, BorderRadius } from '../../../theme/theme';
+import { ModernCard } from '../../../components/ui/ModernCard';
+import { ModernButton } from '../../../components/ui/ModernButton';
+import { ModernInput } from '../../../components/ui/ModernInput';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { TouchableOpacity } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 export default function PermissionRequestScreen() {
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [reason, setReason] = useState('');
-  const { user } = useAuth();
   const { db } = useDatabase();
+  const { user } = useAuth();
   const router = useRouter();
-
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || date;
-    setShowDatePicker(Platform.OS === 'ios');
-    setDate(currentDate);
-  };
+  const [date, setDate] = useState(new Date());
+  const [reason, setReason] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    const formattedDate = date.toISOString().split('T')[0];
-    if (!reason) {
-      Alert.alert('Error', 'Please provide a reason for your permission request.');
-      return;
-    }
-    if (!db || !user) {
-      Alert.alert('Error', 'Database or user not available.');
+    if (!reason.trim()) {
+      Alert.alert('Error', 'Please provide a reason for your permission request');
       return;
     }
 
+    if (!db || !user) {
+      Alert.alert('Error', 'Database connection error');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      await db.runAsync(
-        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?);',
-        user.id, 'permission', formattedDate, reason, 'pending'
-      );
+      const dateString = date.toISOString().split('T')[0];
       
-      Alert.alert('Success', 'Your permission request has been submitted.');
-      router.back();
+      await db.runAsync(
+        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?)',
+        [user.id, 'Permission', dateString, reason, 'pending']
+      );
+
+      // Create notification for admin
+      await db.runAsync(
+        'INSERT INTO notifications (user_id, message) VALUES (?, ?)',
+        [1, `New permission request from ${user.username} for ${dateString}`]
+      );
+
+      Alert.alert('Success', 'Permission request submitted successfully', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
     } catch (error) {
       console.error('Error submitting permission request:', error);
-      Alert.alert('Error', 'Failed to submit request.');
+      Alert.alert('Error', 'Failed to submit permission request');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={Typography.label}>Date of Permission</Text>
-      <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
-        <FontAwesome5 name="calendar-alt" size={16} color={Colors.secondary} />
-        <Text style={styles.datePickerText}>{date.toLocaleDateString()}</Text>
-      </TouchableOpacity>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View entering={FadeInUp.delay(100)} style={styles.header}>
+          <View style={styles.iconContainer}>
+            <FontAwesome5 name="clock" size={32} color={Colors.warning} />
+          </View>
+          <Text style={styles.title}>Permission Request</Text>
+          <Text style={styles.subtitle}>Request permission for early departure or late arrival</Text>
+        </Animated.View>
 
-      {showDatePicker && (
-        <DateTimePicker
-          testID="dateTimePicker"
-          value={date}
-          mode="date"
-          display="default"
-          onChange={onDateChange}
-        />
-      )}
+        <Animated.View entering={FadeInDown.delay(200)}>
+          <ModernCard style={styles.formCard}>
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Permission Date</Text>
+              <TouchableOpacity 
+                style={styles.dateButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <FontAwesome5 name="calendar" size={20} color={Colors.warning} />
+                <Text style={styles.dateText}>{formatDate(date)}</Text>
+                <FontAwesome5 name="chevron-down" size={16} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
 
-      <Text style={Typography.label}>Reason for Permission</Text>
-      <TextInput
-        style={styles.textArea}
-        placeholder="e.g., Personal work for 2 hours..."
-        placeholderTextColor={Colors.lightText}
-        value={reason}
-        onChangeText={setReason}
-        multiline
-      />
-      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Submit Request</Text>
-      </TouchableOpacity>
-    </View>
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Reason for Permission</Text>
+              <ModernInput
+                placeholder="Enter the reason for your permission request..."
+                value={reason}
+                onChangeText={setReason}
+                multiline
+                numberOfLines={4}
+                style={styles.reasonInput}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.infoBox}>
+              <FontAwesome5 name="info-circle" size={20} color={Colors.warning} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoTitle}>Permission Guidelines</Text>
+                <Text style={styles.infoText}>
+                  • Submit requests before the scheduled date{'\n'}
+                  • Specify if it's for early departure or late arrival{'\n'}
+                  • Mention the approximate time needed{'\n'}
+                  • Provide a valid reason for the request
+                </Text>
+              </View>
+            </View>
+
+            <ModernButton
+              title={loading ? "Submitting..." : "Submit Request"}
+              onPress={handleSubmit}
+              disabled={loading}
+              style={[styles.submitButton, { backgroundColor: Colors.warning }]}
+            />
+          </ModernCard>
+        </Animated.View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            testID="dateTimePicker"
+            value={date}
+            mode="date"
+            display="default"
+            minimumDate={new Date()}
+            onChange={onDateChange}
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: Sizing.padding,
     backgroundColor: Colors.background,
   },
-  datePickerButton: {
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  header: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.warningLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+  formCard: {
+    padding: Spacing.xl,
+  },
+  formSection: {
+    marginBottom: Spacing.xl,
+  },
+  label: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
+  },
+  dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: Sizing.borderRadius,
-    padding: Sizing.padding,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: Sizing.margin,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    justifyContent: 'space-between',
   },
-  datePickerText: {
+  dateText: {
     ...Typography.body,
-    color: Colors.darkText,
-    marginLeft: 10,
+    color: Colors.textPrimary,
+    flex: 1,
+    marginLeft: Spacing.md,
   },
-  textArea: {
-    backgroundColor: Colors.white,
-    borderRadius: Sizing.borderRadius,
-    padding: Sizing.padding,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  reasonInput: {
     minHeight: 120,
-    textAlignVertical: 'top',
-    ...Typography.body,
-    color: Colors.darkText,
+    paddingTop: Spacing.lg,
   },
-  button: {
-    backgroundColor: Colors.primary,
-    padding: 15,
-    borderRadius: Sizing.borderRadius,
-    alignItems: 'center',
-    marginTop: 'auto',
-    marginBottom: Sizing.margin,
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: Colors.warningLight,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.warning,
   },
-  buttonText: {
-    color: Colors.white,
-    fontWeight: 'bold',
-    fontSize: 16,
+  infoContent: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  infoTitle: {
+    ...Typography.bodyBold,
+    color: Colors.warning,
+    marginBottom: Spacing.sm,
+  },
+  infoText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  submitButton: {
+    marginTop: Spacing.lg,
   },
 });
