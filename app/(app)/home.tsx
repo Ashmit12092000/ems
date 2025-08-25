@@ -1,65 +1,205 @@
-// File: app/(app)/home.tsx
-// Redesigned dashboard with modern cards and animations.
 
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Animated } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { useRouter, Href } from 'expo-router';
-import { FontAwesome5 } from '@expo/vector-icons';
-import { Colors, Sizing, Typography } from '../../theme/theme';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useDatabase } from '../../context/DatabaseContext';
+import { ModernCard } from '../../components/ui/ModernCard';
+import { ModernButton } from '../../components/ui/ModernButton';
+import { Colors, Typography, Spacing, BorderRadius } from '../../theme/theme';
+import { router } from 'expo-router';
 
-interface ActionItem {
-  title: string;
-  icon: React.ComponentProps<typeof FontAwesome5>['name'];
-  path: Href;
-  color: string;
+interface DashboardStats {
+  totalRequests: number;
+  pendingRequests: number;
+  approvedRequests: number;
+  rejectedRequests: number;
+  unreadNotifications: number;
 }
 
-export default function Home() {
+export default function HomeScreen() {
   const { user } = useAuth();
-  const router = useRouter();
-  const isHOD = user?.role === 'HOD';
+  const { database } = useDatabase();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalRequests: 0,
+    pendingRequests: 0,
+    approvedRequests: 0,
+    rejectedRequests: 0,
+    unreadNotifications: 0,
+  });
+  const [refreshing, setRefreshing] = useState(false);
 
-  const employeeActions: ActionItem[] = [
-    { title: 'Leave Request', icon: 'calendar-plus', path: '/requests/leave', color: '#E9F2FF' },
-    { title: 'Permission', icon: 'clock', path: '/requests/permission', color: '#E6FFFA' },
-    { title: 'Shift Adjust', icon: 'exchange-alt', path: '/requests/shift', color: '#F6E6FF' },
-    { title: 'My Requests', icon: 'list-alt', path: '/requests/list', color: '#EBF6FF' },
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    if (!database || !user) return;
+
+    try {
+      // Get user's requests
+      const requests = await database.getAllAsync(
+        'SELECT * FROM requests WHERE user_id = ?',
+        [user.id]
+      ) as any[];
+
+      // Get unread notifications
+      const notifications = await database.getAllAsync(
+        'SELECT * FROM notifications WHERE user_id = ? AND is_read = 0',
+        [user.id]
+      ) as any[];
+
+      setStats({
+        totalRequests: requests.length,
+        pendingRequests: requests.filter(r => r.status === 'pending').length,
+        approvedRequests: requests.filter(r => r.status === 'approved').length,
+        rejectedRequests: requests.filter(r => r.status === 'rejected').length,
+        unreadNotifications: notifications.length,
+      });
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  const quickActions = [
+    {
+      title: 'Leave Request',
+      subtitle: 'Apply for leave',
+      onPress: () => router.push('/(app)/requests/leave'),
+      color: Colors.primary,
+    },
+    {
+      title: 'Permission Request',
+      subtitle: 'Request permission',
+      onPress: () => router.push('/(app)/requests/permission'),
+      color: Colors.success,
+    },
+    {
+      title: 'Shift Change',
+      subtitle: 'Request shift change',
+      onPress: () => router.push('/(app)/requests/shift'),
+      color: Colors.warning,
+    },
+    {
+      title: 'View Requests',
+      subtitle: 'Check request status',
+      onPress: () => router.push('/(app)/requests/list'),
+      color: Colors.secondary,
+    },
   ];
 
-  const hodActions: ActionItem[] = [
-    { title: 'Approve Requests', icon: 'check-circle', path: '/requests/list', color: '#E6FFFA' },
-    { title: 'Manage Roster', icon: 'calendar-alt', path: '/admin/roster', color: '#EBF6FF' },
-    { title: 'Attendance', icon: 'user-check', path: '/admin/attendance', color: '#FFF0E6' },
-    { title: 'Set Limits', icon: 'cogs', path: '/admin/limits', color: '#F6E6FF' },
-  ];
+  const StatCard = ({ title, value, color = Colors.primary }: { title: string; value: number; color?: string }) => (
+    <ModernCard variant="elevated" style={styles.statCard}>
+      <View style={styles.statContent}>
+        <View style={[styles.statIcon, { backgroundColor: color + '15' }]}>
+          <View style={[styles.statDot, { backgroundColor: color }]} />
+        </View>
+        <View style={styles.statInfo}>
+          <Text style={styles.statValue}>{value}</Text>
+          <Text style={styles.statTitle}>{title}</Text>
+        </View>
+      </View>
+    </ModernCard>
+  );
 
-  const actions = isHOD ? hodActions : employeeActions;
+  const QuickActionCard = ({ title, subtitle, onPress, color }: typeof quickActions[0]) => (
+    <ModernCard variant="outlined" style={styles.actionCard}>
+      <View style={styles.actionContent}>
+        <View style={[styles.actionIcon, { backgroundColor: color + '15' }]}>
+          <View style={[styles.actionDot, { backgroundColor: color }]} />
+        </View>
+        <View style={styles.actionInfo}>
+          <Text style={styles.actionTitle}>{title}</Text>
+          <Text style={styles.actionSubtitle}>{subtitle}</Text>
+        </View>
+      </View>
+      <ModernButton
+        title="Go"
+        onPress={onPress}
+        variant="ghost"
+        size="small"
+      />
+    </ModernCard>
+  );
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={Typography.h1}>Welcome, {user?.username}</Text>
-        <Text style={Typography.body}>Here's your dashboard for today.</Text>
-      </View>
-      <View style={styles.grid}>
-        {actions.map((action, index) => (
-          <Animated.View 
-            key={index} 
-            style={styles.cardContainer}
-            entering={FadeInDown.duration(500).delay(index * 100)}
-          >
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: action.color }]}
-              onPress={() => router.push(action.path)}
-            >
-              <FontAwesome5 name={action.icon} size={32} color={Colors.primary} />
-              <Text style={styles.cardText}>{action.title}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        ))}
-      </View>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      <Animated.View 
+        style={[
+          styles.animatedContent,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()},</Text>
+            <Text style={styles.userName}>{user?.username}</Text>
+          </View>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{user?.role}</Text>
+          </View>
+        </View>
+
+        {/* Stats Overview */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <View style={styles.statsGrid}>
+            <StatCard title="Total Requests" value={stats.totalRequests} color={Colors.primary} />
+            <StatCard title="Pending" value={stats.pendingRequests} color={Colors.warning} />
+            <StatCard title="Approved" value={stats.approvedRequests} color={Colors.success} />
+            <StatCard title="Notifications" value={stats.unreadNotifications} color={Colors.info} />
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionsGrid}>
+            {quickActions.map((action, index) => (
+              <QuickActionCard key={index} {...action} />
+            ))}
+          </View>
+        </View>
+      </Animated.View>
     </ScrollView>
   );
 }
@@ -67,37 +207,117 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.backgroundSecondary,
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+  },
+  animatedContent: {
+    flex: 1,
   },
   header: {
-    padding: Sizing.padding * 1.5,
-    paddingTop: Sizing.padding * 2,
-    backgroundColor: Colors.white,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
   },
-  grid: {
+  greeting: {
+    ...Typography.bodyLarge,
+    color: Colors.textSecondary,
+  },
+  userName: {
+    ...Typography.headingLarge,
+    marginTop: Spacing.xs,
+  },
+  badge: {
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+  badgeText: {
+    ...Typography.labelMedium,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  section: {
+    marginBottom: Spacing.xxl,
+  },
+  sectionTitle: {
+    ...Typography.headingMedium,
+    marginBottom: Spacing.lg,
+  },
+  statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    padding: Sizing.margin / 2,
+    gap: Spacing.md,
   },
-  cardContainer: {
-    width: '50%',
-    padding: Sizing.padding / 2,
+  statCard: {
+    flex: 1,
+    minWidth: 150,
   },
-  card: {
-    borderRadius: Sizing.borderRadius * 1.5,
-    padding: Sizing.padding,
+  statContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  statIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    aspectRatio: 1,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
-  cardText: {
-    ...Typography.body,
-    color: Colors.darkText,
-    marginTop: 15,
-    fontWeight: '600',
-    textAlign: 'center',
+  statDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  statInfo: {
+    flex: 1,
+  },
+  statValue: {
+    ...Typography.headingLarge,
+    marginBottom: Spacing.xs,
+  },
+  statTitle: {
+    ...Typography.bodyMedium,
+  },
+  actionsGrid: {
+    gap: Spacing.md,
+  },
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  actionContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  actionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  actionInfo: {
+    flex: 1,
+  },
+  actionTitle: {
+    ...Typography.labelLarge,
+    marginBottom: Spacing.xs,
+  },
+  actionSubtitle: {
+    ...Typography.bodySmall,
   },
 });

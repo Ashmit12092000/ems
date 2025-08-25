@@ -1,62 +1,53 @@
 
-import React from 'react';
-import { AuthProvider, useAuth } from '../context/AuthContext';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import 'react-native-reanimated/lib/commonjs/reanimated2/core/errors'; 
+
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { AuthProvider } from '../context/AuthContext';
 import { DatabaseProvider } from '../context/DatabaseContext';
-import { View, ActivityIndicator } from 'react-native';
-import { Colors } from '../theme/theme';
 
-const InitialLayout = () => {
-  const { user, isAuthReady } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-
-  useEffect(() => {
-    // Wait until the authentication state is actually ready
-    if (!isAuthReady) {
-      return;
-    }
-
-    const inAppGroup = segments[0] === '(app)';
-    const inAuthGroup = segments[0] === '(auth)';
-
-    // If user is authenticated but in auth screens, redirect to home
-    if (user && inAuthGroup) {
-      router.replace('/home');
-    } 
-    // If user is not authenticated but in app screens, redirect to login
-    else if (!user && inAppGroup) {
-      router.replace('/login');
-    }
-    // If user is not authenticated and not in any group, redirect to login
-    else if (!user && !inAuthGroup && !inAppGroup) {
-      router.replace('/login');
-    }
-  }, [user, isAuthReady, segments]);
-
-  // While the authentication state is being determined, show a loading screen
-  if (!isAuthReady) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  // Once ready, render the currently active route
-  return <Slot />;
-};
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const colorScheme = useColorScheme();
+  const [loaded] = useFonts({
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  });
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded]);
+
+  if (!loaded) {
+    return null;
+  }
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <DatabaseProvider>
-        <AuthProvider>
-          <InitialLayout />
-        </AuthProvider>
-      </DatabaseProvider>
-    </GestureHandlerRootView>
+    <DatabaseProvider>
+      <AuthProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack screenOptions={{ 
+            headerShown: false,
+            animation: 'slide_from_right',
+            animationDuration: 300,
+          }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(app)" />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </AuthProvider>
+    </DatabaseProvider>
   );
 }
