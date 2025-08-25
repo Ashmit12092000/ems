@@ -93,25 +93,25 @@ export default function HomeScreen() {
     {
       title: 'Leave Request',
       subtitle: 'Apply for leave',
-      onPress: () => router.push('/(app)/requests/leave'),
+      onPress: () => router.push('/requests/leave'),
       color: Colors.primary,
     },
     {
       title: 'Permission Request',
       subtitle: 'Request permission',
-      onPress: () => router.push('/(app)/requests/permission'),
+      onPress: () => router.push('/requests/permission'),
       color: Colors.success,
     },
     {
       title: 'Shift Change',
       subtitle: 'Request shift change',
-      onPress: () => router.push('/(app)/requests/shift'),
+      onPress: () => router.push('/requests/shift'),
       color: Colors.warning,
     },
     {
       title: 'View Requests',
       subtitle: 'Check request status',
-      onPress: () => router.push('/(app)/requests/list'),
+      onPress: () => router.push('/requests'),
       color: Colors.secondary,
     },
   ];
