@@ -1,37 +1,36 @@
-
 export const Colors = {
   // Primary brand colors - professional blues
   primary: '#2563EB', // Modern blue
   primaryLight: '#3B82F6',
   primaryDark: '#1D4ED8',
-  
+
   // Secondary colors
   secondary: '#64748B', // Slate gray
   secondaryLight: '#94A3B8',
-  
+
   // Neutral colors
   background: '#FFFFFF',
   backgroundSecondary: '#F8FAFC',
   backgroundTertiary: '#F1F5F9',
-  
+
   // Text colors
   textPrimary: '#0F172A',
   textSecondary: '#475569',
   textTertiary: '#64748B',
   textInverse: '#FFFFFF',
-  
+
   // Status colors
   success: '#10B981',
   warning: '#F59E0B',
   error: '#EF4444',
   info: '#3B82F6',
-  
+
   // UI colors
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
   shadow: 'rgba(15, 23, 42, 0.08)',
   overlay: 'rgba(15, 23, 42, 0.6)',
-  
+
   // Interactive colors
   interactive: '#2563EB',
   interactiveHover: '#1D4ED8',
@@ -45,7 +44,39 @@ export const Spacing = {
   lg: 24,
   xl: 32,
   xxl: 48,
-  xxxl: 64,
+} as const;
+
+export const Shadow = {
+  small: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  large: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
 };
 
 export const BorderRadius = {
@@ -70,7 +101,7 @@ export const Typography = {
     lineHeight: 36,
     color: Colors.textPrimary,
   },
-  
+
   // Headings
   headingLarge: {
     fontSize: 24,
@@ -90,7 +121,7 @@ export const Typography = {
     lineHeight: 24,
     color: Colors.textPrimary,
   },
-  
+
   // Body text
   bodyLarge: {
     fontSize: 16,
@@ -110,7 +141,7 @@ export const Typography = {
     lineHeight: 16,
     color: Colors.textTertiary,
   },
-  
+
   // Labels and captions
   labelLarge: {
     fontSize: 14,
@@ -145,7 +176,7 @@ export const Shadows = {
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 8,
   },
   large: {
     shadowColor: Colors.shadow,

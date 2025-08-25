@@ -1,7 +1,7 @@
 // File: context/DatabaseContext.tsx
 // Updated with a more defensive setup to handle hot-reloading issues.
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import { Colors } from '../theme/theme';
@@ -31,49 +31,98 @@ interface DatabaseProviderProps {
   children: ReactNode;
 }
 
-export const DatabaseProvider = ({ children }: DatabaseProviderProps) => {
-  const [isDbLoading, setIsDbLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
-  useEffect(() => {
-    async function setupDatabase() {
-      try {
-        // Only open the database if the instance doesn't exist
-        if (!dbInstance) {
-            console.log("Opening new database connection...");
-            try {
-              dbInstance = await SQLite.openDatabaseAsync('leave_management.db');
-              
-              await dbInstance.execAsync(`
-                PRAGMA journal_mode = WAL;
-                CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('Employee', 'HOD')));
-                CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT NOT NULL, date TEXT NOT NULL, reason TEXT, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')), FOREIGN KEY (user_id) REFERENCES users(id));
-                CREATE TABLE IF NOT EXISTS monthly_limits (limit_type TEXT PRIMARY KEY, value INTEGER NOT NULL);
-                CREATE TABLE IF NOT EXISTS duty_roster (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, date TEXT NOT NULL, shift_type TEXT, FOREIGN KEY (user_id) REFERENCES users(id));
-                CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, date TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('Present', 'Absent', 'Leave')), UNIQUE(user_id, date), FOREIGN KEY (user_id) REFERENCES users(id));
-                CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
-              `);
-              console.log("Database initialized successfully.");
-            } catch (dbError) {
-              console.error("Database connection/initialization error:", dbError);
-              throw dbError;
-            }
-        } else {
-            console.log("Using existing database connection.");
-        }
-      } catch (e) {
-        console.error("CRITICAL: Database initialization failed:", e);
-        setError(e as Error);
-      } finally {
-        setIsDbLoading(false);
-      }
+  const initializeDatabase = useCallback(async () => {
+    try {
+      console.log('Opening new database connection...');
+      const database = await SQLite.openDatabaseAsync('ems.db');
+
+      await database.execAsync(`
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'Employee',
+          department TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS leave_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          status TEXT DEFAULT 'Pending',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS permission_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          date TEXT NOT NULL,
+          start_time TEXT NOT NULL,
+          end_time TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          status TEXT DEFAULT 'Pending',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS shift_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          current_shift TEXT NOT NULL,
+          requested_shift TEXT NOT NULL,
+          date TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          status TEXT DEFAULT 'Pending',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          type TEXT DEFAULT 'info',
+          is_read BOOLEAN DEFAULT FALSE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+      `);
+
+      setDb(database);
+      console.log('Database initialized successfully.');
+      setIsReady(true);
+    } catch (error) {
+      console.error('CRITICAL: Database initialization failed:', error);
+      setIsReady(true); // Still set ready to prevent infinite loading
     }
-
-    setupDatabase();
-    
   }, []);
 
-  if (error) {
+  useEffect(() => {
+    initializeDatabase();
+  }, [initializeDatabase]);
+
+
+  if (!isReady) {
+    return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+    );
+  }
+  
+  if (!db) {
     return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'red' }}>A critical database error occurred.</Text>
@@ -82,17 +131,9 @@ export const DatabaseProvider = ({ children }: DatabaseProviderProps) => {
     );
   }
 
-  if (isDbLoading) {
-    return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-    );
-  }
-
   const value = {
-    db: dbInstance,
-    isDbLoading: isDbLoading,
+    db: db,
+    isDbLoading: !isReady,
   };
 
   return (

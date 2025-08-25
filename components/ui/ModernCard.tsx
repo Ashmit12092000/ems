@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { Colors, BorderRadius, Spacing, Shadows } from '../../theme/theme';
 
 interface ModernCardProps {
@@ -18,7 +17,7 @@ export const ModernCard: React.FC<ModernCardProps> = ({
 }) => {
   const getCardStyle = () => {
     const baseStyle = [styles.card, { padding: Spacing[padding] }];
-    
+
     switch (variant) {
       case 'elevated':
         return [...baseStyle, styles.elevated];
@@ -38,8 +37,28 @@ export const ModernCard: React.FC<ModernCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: Spacing.lg,
+    margin: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    // Use boxShadow for web compatibility
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
   },
   default: {
     ...Shadows.small,

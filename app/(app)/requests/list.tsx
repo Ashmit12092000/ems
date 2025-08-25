@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,6 +8,7 @@ import {
   Alert,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useDatabase } from '../../../context/DatabaseContext';
 import { useAuth } from '../../../context/AuthContext';
@@ -273,139 +273,155 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+  scrollContent: {
+    padding: Spacing.md,
   },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-  },
-  filtersContainer: {
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  card: {
     backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    marginRight: Spacing.sm,
+    borderRadius: 16,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  activeFilterButton: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterButtonText: {
-    ...Typography.bodyMedium,
-    color: Colors.textSecondary,
-    marginRight: Spacing.xs,
-  },
-  activeFilterButtonText: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  countBadge: {
-    backgroundColor: Colors.backgroundSecondary,
-    paddingHorizontal: Spacing.xs,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.sm,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  activeCountBadge: {
-    backgroundColor: Colors.white + '20',
-  },
-  countText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  activeCountText: {
-    color: Colors.white,
-  },
-  listContainer: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
-  requestCard: {
-    marginBottom: Spacing.md,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   requestHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  requestTypeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  typeIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: BorderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   requestType: {
-    ...Typography.bodyLarge,
-    color: Colors.textPrimary,
+    fontSize: 18,
     fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  requestUser: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
+    color: Colors.textPrimary,
+    flex: 1,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: Colors.primary + '20',
   },
   statusText: {
-    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.primary,
     fontWeight: '600',
-    marginLeft: Spacing.xs,
     textTransform: 'capitalize',
   },
   requestDetails: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.xs,
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
-  detailText: {
-    ...Typography.body,
+  detailLabel: {
+    fontSize: 14,
     color: Colors.textSecondary,
-    marginLeft: Spacing.sm,
     flex: 1,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  detailValue: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
+  },
+  reasonContainer: {
     marginTop: Spacing.sm,
   },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: Spacing.xs,
+  reasonLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+  },
+  reasonText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    lineHeight: 20,
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: Spacing.lg + 80,
+    right: Spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
+  },
+  fab: {
+    position: 'absolute',
+    bottom: Spacing.xl + 60,
+    right: Spacing.lg,
+    backgroundColor: Colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  filterButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    marginHorizontal: 4,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -413,13 +429,14 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xxl,
   },
   emptyTitle: {
-    ...Typography.h3,
+    fontSize: 18,
+    fontWeight: '600',
     color: Colors.textPrimary,
     marginTop: Spacing.md,
-    marginBottom: Spacing.xs,
+    marginBottom: 4,
   },
   emptySubtitle: {
-    ...Typography.body,
+    fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
   },
