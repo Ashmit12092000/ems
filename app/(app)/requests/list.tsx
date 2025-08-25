@@ -299,23 +299,101 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  requestHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  header: {
+    marginBottom: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.lg,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.textPrimary,
     marginBottom: Spacing.sm,
   },
-  requestType: {
-    fontSize: 18,
+  subtitle: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    lineHeight: 24,
+  },
+  filtersContainer: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginRight: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  activeFilterButton: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+    marginRight: Spacing.xs,
+  },
+  activeFilterButtonText: {
+    color: Colors.textInverse,
+  },
+  countBadge: {
+    backgroundColor: Colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  activeCountBadge: {
+    backgroundColor: Colors.textInverse,
+  },
+  countText: {
+    fontSize: 12,
     fontWeight: '600',
-    color: Colors.textPrimary,
-    flex: 1,
+    color: Colors.textSecondary,
+  },
+  activeCountText: {
+    color: Colors.primary,
+  },
+  listContainer: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.xxl,
+  },
+  requestCard: {
+    marginBottom: Spacing.md,
+  },
+  requestTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typeIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
+  },
+  requestUser: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: Colors.primary + '20',
+    borderRadius: BorderRadius.sm,
+    gap: 4,
   },
   statusText: {
     fontSize: 12,
@@ -324,12 +402,32 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   requestDetails: {
-    marginBottom: Spacing.sm,
+    marginTop: Spacing.sm,
+    gap: Spacing.xs,
   },
   detailRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  detailText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  requestHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
   },
   detailLabel: {
     fontSize: 14,
@@ -415,13 +513,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-  },
-  filterButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    marginHorizontal: 4,
   },
   emptyContainer: {
     alignItems: 'center',

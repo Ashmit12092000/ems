@@ -9,7 +9,7 @@ import { Colors } from '../theme/theme';
 type SQLiteDatabase = SQLite.SQLiteDatabase;
 
 interface DatabaseContextType {
-  db: SQLiteDatabase | null;
+  database: SQLiteDatabase | null;
   isDbLoading: boolean;
 }
 
@@ -132,7 +132,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }
 
   const value = {
-    db: db,
+    database: db,
     isDbLoading: !isReady,
   };
 
