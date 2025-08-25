@@ -35,44 +35,6 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
-    elevation: 4,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-});
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
     backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
