@@ -1,54 +1,26 @@
-
-import React from 'react';
 import { Stack } from 'expo-router';
-import { Colors } from '../../../theme/theme';
+import { useAuth } from '../../../context/AuthContext';
+import { View, Text } from 'react-native';
+import { Colors, Typography } from '../../../theme/theme';
 
 export default function RequestsLayout() {
+  const { user } = useAuth();
+
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: Colors.background,
-          borderBottomWidth: 1,
-          borderBottomColor: Colors.border,
-        },
-        headerTitleStyle: {
-          fontSize: 18,
-          fontWeight: '600',
-          color: Colors.textPrimary,
-        },
-        headerTintColor: Colors.primary,
-        headerBackTitleVisible: false,
-      }}
-    >
-      <Stack.Screen
-        name="list"
-        options={{
-          title: 'My Requests',
-          headerShown: false, // Hide header since it's a tab
-        }}
-      />
-      <Stack.Screen
-        name="leave"
-        options={{
-          title: 'Leave Request',
-          presentation: 'card',
-        }}
-      />
-      <Stack.Screen
-        name="permission"
-        options={{
-          title: 'Permission Request',
-          presentation: 'card',
-        }}
-      />
-      <Stack.Screen
-        name="shift"
-        options={{
-          title: 'Shift Change Request',
-          presentation: 'card',
-        }}
-      />
+    <Stack screenOptions={{
+      headerStyle: {
+        backgroundColor: '#6366f1',
+      },
+      headerTintColor: '#fff',
+      headerTitleStyle: {
+        fontWeight: 'bold',
+      },
+    }}>
+      <Stack.Screen name="index" options={{ title: 'My Requests' }} />
+      <Stack.Screen name="leave" options={{ title: 'Leave Request' }} />
+      <Stack.Screen name="permission" options={{ title: 'Permission Request' }} />
+      <Stack.Screen name="shift" options={{ title: 'Shift Request' }} />
+      <Stack.Screen name="list" options={{ title: 'All Requests' }} />
     </Stack>
   );
 }

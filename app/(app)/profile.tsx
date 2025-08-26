@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useDatabase } from '../../context/DatabaseContext';
+import { router } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '../../theme/theme';
 import { ModernCard } from '../../components/ui/ModernCard';
@@ -76,10 +77,11 @@ export default function ProfileScreen() {
     }
 
     try {
-      // In a real app, you'd hash the password
+      // Hash the password before storing
+      const hashedPassword = await hashPassword(newPassword);
       await db?.runAsync(
         'UPDATE users SET password_hash = ? WHERE id = ?',
-        [newPassword, user?.id]
+        [hashedPassword, user?.id]
       );
       
       Alert.alert('Success', 'Password updated successfully');
@@ -92,13 +94,29 @@ export default function ProfileScreen() {
     }
   };
 
+  const hashPassword = async (password: string): Promise<string> => {
+    const Crypto = await import('expo-crypto');
+    return await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      password
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: logout, style: 'destructive' },
+        { 
+          text: 'Logout', 
+          onPress: () => {
+            logout();
+            // Force navigation to login screen after logout
+            router.replace('/(auth)/login');
+          }, 
+          style: 'destructive' 
+        },
       ]
     );
   };

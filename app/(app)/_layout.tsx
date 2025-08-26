@@ -1,5 +1,3 @@
-
-import React from 'react';
 import { Tabs } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { Colors } from '../../theme/theme';
@@ -8,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function AppLayout() {
   const { user } = useAuth();
 
-  const commonTabs = [
+  const employeeTabs = [
     {
       name: 'home',
       title: 'Home',
@@ -33,13 +31,34 @@ export default function AppLayout() {
 
   const hodTabs = [
     {
+      name: 'home',
+      title: 'Home',
+      icon: 'home' as const,
+    },
+    {
+      name: 'requests',
+      title: 'Requests',
+      icon: 'document-text' as const,
+      href: '/requests/list', // Direct HOD to request list
+    },
+    {
+      name: 'notifications',
+      title: 'Notifications',
+      icon: 'notifications' as const,
+    },
+    {
       name: 'admin',
       title: 'Admin',
       icon: 'settings' as const,
     },
+    {
+      name: 'profile',
+      title: 'Profile',
+      icon: 'person' as const,
+    },
   ];
 
-  const tabs = user?.role === 'HOD' ? [...commonTabs, ...hodTabs] : commonTabs;
+  const tabs = user?.role === 'HOD' ? hodTabs : employeeTabs;
 
   return (
     <Tabs
@@ -81,7 +100,7 @@ export default function AppLayout() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name={tab.icon} size={size || 24} color={color} />
             ),
-            href: tab.name === 'admin' && user?.role !== 'HOD' ? null : undefined,
+            href: tab.href || undefined,
           }}
         />
       ))}

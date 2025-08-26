@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,10 +16,10 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { ModernCard } from '../../../components/ui/ModernCard';
 import { ModernButton } from '../../../components/ui/ModernButton';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import { router } from 'expo-router';
 
 interface RequestItem {
   id: number;
-  user_id: number;
   type: string;
   status: string;
   date?: string;
@@ -30,7 +31,6 @@ interface RequestItem {
   requested_shift?: string;
   reason: string;
   created_at: string;
-  username?: string;
 }
 
 const statusColors = {
@@ -45,47 +45,37 @@ const statusIcons = {
   Rejected: 'times-circle',
 };
 
-export default function RequestListScreen() {
+export default function MyRequestsScreen() {
   const { db } = useDatabase();
   const { user } = useAuth();
   const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
   useEffect(() => {
     fetchRequests();
   }, [db, user]);
 
-  useEffect(() => {
-    filterRequests();
-  }, [requests, selectedFilter]);
-
   const fetchRequests = async () => {
     if (!db || !user) return;
 
     try {
-      // Get all request types with user information
+      // Get only this user's requests
       const leaveRequests = await db.getAllAsync(
-        `SELECT l.*, u.username, 'Leave' as type FROM leave_requests l 
-         JOIN users u ON l.user_id = u.id 
-         ORDER BY l.created_at DESC`
+        `SELECT *, 'Leave' as type FROM leave_requests WHERE user_id = ? ORDER BY created_at DESC`,
+        [user.id]
       ) as RequestItem[];
 
       const permissionRequests = await db.getAllAsync(
-        `SELECT p.*, u.username, 'Permission' as type FROM permission_requests p 
-         JOIN users u ON p.user_id = u.id 
-         ORDER BY p.created_at DESC`
+        `SELECT *, 'Permission' as type FROM permission_requests WHERE user_id = ? ORDER BY created_at DESC`,
+        [user.id]
       ) as RequestItem[];
 
       const shiftRequests = await db.getAllAsync(
-        `SELECT s.*, u.username, 'Shift' as type FROM shift_requests s 
-         JOIN users u ON s.user_id = u.id 
-         ORDER BY s.created_at DESC`
+        `SELECT *, 'Shift' as type FROM shift_requests WHERE user_id = ? ORDER BY created_at DESC`,
+        [user.id]
       ) as RequestItem[];
 
-      // Combine all requests and sort by creation date
       const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -99,21 +89,34 @@ export default function RequestListScreen() {
     }
   };
 
-  const filterRequests = () => {
-    if (selectedFilter === 'all') {
-      setFilteredRequests(requests);
-    } else {
-      const filtered = requests.filter(request => 
-        request.status.toLowerCase() === selectedFilter.toLowerCase()
-      );
-      setFilteredRequests(filtered);
-    }
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchRequests();
   };
+
+  const quickActions = [
+    {
+      title: 'Leave Request',
+      subtitle: 'Apply for leave',
+      icon: 'calendar-times',
+      onPress: () => router.push('/requests/leave'),
+      color: Colors.primary,
+    },
+    {
+      title: 'Permission Request',
+      subtitle: 'Request permission',
+      icon: 'user-clock',
+      onPress: () => router.push('/requests/permission'),
+      color: Colors.success,
+    },
+    {
+      title: 'Shift Change',
+      subtitle: 'Request shift change',
+      icon: 'exchange-alt',
+      onPress: () => router.push('/requests/shift'),
+      color: Colors.warning,
+    },
+  ];
 
   const getRequestDetails = (request: RequestItem) => {
     switch (request.type) {
@@ -141,23 +144,6 @@ export default function RequestListScreen() {
     }
   };
 
-  const FilterButton = ({ filter, title, count }: { filter: typeof selectedFilter; title: string; count: number }) => (
-    <TouchableOpacity
-      style={[
-        styles.filterButton,
-        selectedFilter === filter && styles.activeFilterButton
-      ]}
-      onPress={() => setSelectedFilter(filter)}
-    >
-      <Text style={[
-        styles.filterButtonText,
-        selectedFilter === filter && styles.activeFilterButtonText
-      ]}>
-        {title} ({count})
-      </Text>
-    </TouchableOpacity>
-  );
-
   const renderRequest = ({ item }: { item: RequestItem }) => (
     <Animated.View entering={FadeInDown}>
       <ModernCard style={styles.requestCard}>
@@ -171,7 +157,9 @@ export default function RequestListScreen() {
               />
               <Text style={styles.requestType}>{item.type} Request</Text>
             </View>
-            <Text style={styles.requestUser}>by {item.username}</Text>
+            <Text style={styles.requestDate}>
+              Submitted: {new Date(item.created_at).toLocaleDateString()}
+            </Text>
           </View>
           <View style={[
             styles.statusBadge, 
@@ -192,82 +180,68 @@ export default function RequestListScreen() {
         </View>
 
         <View style={styles.requestDetails}>
-          <View style={styles.detailRow}>
-            <FontAwesome5 name="calendar" size={14} color={Colors.textSecondary} />
-            <Text style={styles.detailText}>{getRequestDetails(item)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <FontAwesome5 name="comment" size={14} color={Colors.textSecondary} />
-            <Text style={styles.detailText} numberOfLines={2}>{item.reason}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <FontAwesome5 name="clock" size={14} color={Colors.textSecondary} />
-            <Text style={styles.detailText}>
-              Submitted: {new Date(item.created_at).toLocaleDateString()}
-            </Text>
-          </View>
+          <Text style={styles.detailText}>{getRequestDetails(item)}</Text>
+          <Text style={styles.reasonText} numberOfLines={2}>{item.reason}</Text>
         </View>
       </ModernCard>
     </Animated.View>
   );
 
-  const getFilterCounts = () => {
-    return {
-      all: requests.length,
-      pending: requests.filter(r => r.status === 'Pending').length,
-      approved: requests.filter(r => r.status === 'Approved').length,
-      rejected: requests.filter(r => r.status === 'Rejected').length,
-    };
-  };
-
-  const filterCounts = getFilterCounts();
-
   return (
     <View style={styles.container}>
       <Animated.View entering={FadeInUp} style={styles.header}>
         <View style={styles.headerIcon}>
-          <FontAwesome5 name="clipboard-list" size={32} color={Colors.primary} />
+          <FontAwesome5 name="user-clock" size={32} color={Colors.primary} />
         </View>
-        <Text style={styles.title}>All Requests</Text>
-        <Text style={styles.subtitle}>Complete overview of employee requests</Text>
+        <Text style={styles.title}>My Requests</Text>
+        <Text style={styles.subtitle}>Manage your leave, permission, and shift requests</Text>
       </Animated.View>
 
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
-        <FilterButton filter="all" title="All" count={filterCounts.all} />
-        <FilterButton filter="pending" title="Pending" count={filterCounts.pending} />
-        <FilterButton filter="approved" title="Approved" count={filterCounts.approved} />
-        <FilterButton filter="rejected" title="Rejected" count={filterCounts.rejected} />
+      {/* Quick Actions */}
+      <View style={styles.quickActions}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.actionsGrid}>
+          {quickActions.map((action, index) => (
+            <TouchableOpacity key={index} style={styles.actionButton} onPress={action.onPress}>
+              <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>
+                <FontAwesome5 name={action.icon} size={20} color={action.color} />
+              </View>
+              <Text style={styles.actionTitle}>{action.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
-      {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <FontAwesome5 name="spinner" size={32} color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading requests...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredRequests}
-          renderItem={renderRequest}
-          keyExtractor={(item) => `${item.type}-${item.id}`}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <Animated.View entering={FadeInDown} style={styles.emptyContainer}>
-              <FontAwesome5 name="inbox" size={64} color={Colors.textSecondary} />
-              <Text style={styles.emptyTitle}>No requests found</Text>
-              <Text style={styles.emptySubtitle}>
-                {selectedFilter === 'all' 
-                  ? 'No requests have been submitted yet'
-                  : `No ${selectedFilter} requests found`}
-              </Text>
-            </Animated.View>
-          }
-        />
-      )}
+      {/* Requests List */}
+      <View style={styles.requestsSection}>
+        <Text style={styles.sectionTitle}>Request History</Text>
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <FontAwesome5 name="spinner" size={32} color={Colors.primary} />
+            <Text style={styles.loadingText}>Loading requests...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={requests}
+            renderItem={renderRequest}
+            keyExtractor={(item) => `${item.type}-${item.id}`}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={
+              <Animated.View entering={FadeInDown} style={styles.emptyContainer}>
+                <FontAwesome5 name="inbox" size={64} color={Colors.textSecondary} />
+                <Text style={styles.emptyTitle}>No requests yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Start by creating your first request using the quick actions above
+                </Text>
+              </Animated.View>
+            }
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -303,36 +277,43 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
   },
-  filterContainer: {
-    flexDirection: 'row',
-    padding: Spacing.md,
-    gap: Spacing.sm,
+  quickActions: {
+    padding: Spacing.lg,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  filterButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.backgroundSecondary,
+  sectionTitle: {
+    ...Typography.headingMedium,
+    marginBottom: Spacing.md,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  actionButton: {
     alignItems: 'center',
+    flex: 1,
+    paddingVertical: Spacing.md,
   },
-  activeFilterButton: {
-    backgroundColor: Colors.primary,
+  actionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
-  filterButtonText: {
-    ...Typography.labelSmall,
-    color: Colors.textSecondary,
-    fontWeight: '500',
+  actionTitle: {
+    ...Typography.labelMedium,
+    textAlign: 'center',
   },
-  activeFilterButtonText: {
-    color: Colors.white,
-    fontWeight: '600',
+  requestsSection: {
+    flex: 1,
+    padding: Spacing.lg,
   },
   listContainer: {
-    padding: Spacing.lg,
+    paddingBottom: Spacing.lg,
   },
   requestCard: {
     marginBottom: Spacing.md,
@@ -358,7 +339,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: '600',
   },
-  requestUser: {
+  requestDate: {
     ...Typography.bodySmall,
     color: Colors.textSecondary,
   },
@@ -377,15 +358,14 @@ const styles = StyleSheet.create({
   requestDetails: {
     gap: Spacing.sm,
   },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-  },
   detailText: {
     ...Typography.bodyMedium,
     color: Colors.textPrimary,
-    flex: 1,
+    fontWeight: '500',
+  },
+  reasonText: {
+    ...Typography.bodyMedium,
+    color: Colors.textSecondary,
   },
   loadingContainer: {
     flex: 1,

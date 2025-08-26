@@ -45,8 +45,8 @@ export default function PermissionRequestScreen() {
 
       // Create notification for admin
       await db.runAsync(
-        'INSERT INTO notifications (user_id, message) VALUES (?, ?)',
-        [1, `New permission request from ${user.username} for ${dateString}`]
+        'INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)',
+        [1, 'New Permission Request', `New permission request from ${user.username} for ${dateString}`]
       );
 
       Alert.alert('Success', 'Permission request submitted successfully', [

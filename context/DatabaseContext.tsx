@@ -43,13 +43,44 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
           PRAGMA journal_mode = WAL;
           CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'Employee',
             department TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
+          
+          CREATE TABLE IF NOT EXISTS requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            date TEXT NOT NULL,
+            reason TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+          );
+          
+          CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+          );
+          
+          CREATE TABLE IF NOT EXISTS monthly_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            limit_type TEXT UNIQUE NOT NULL,
+            value INTEGER NOT NULL
+          );
+          
+          INSERT OR IGNORE INTO monthly_limits (limit_type, value) VALUES 
+          ('leave', 5),
+          ('permission', 10),
+          ('shift', 3);
 
           CREATE TABLE IF NOT EXISTS leave_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

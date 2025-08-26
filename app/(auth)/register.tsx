@@ -16,6 +16,7 @@ import { ModernCard } from '../../components/ui/ModernCard';
 import { ModernInput } from '../../components/ui/ModernInput';
 import { ModernButton } from '../../components/ui/ModernButton';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import * as Crypto from 'expo-crypto';
 
 export default function RegisterScreen() {
   const [formData, setFormData] = useState({
@@ -26,7 +27,14 @@ export default function RegisterScreen() {
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
-  const { database } = useDatabase();
+  const { db } = useDatabase();
+
+  const hashPassword = async (password: string): Promise<string> => {
+    return await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      password
+    );
+  };
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
@@ -52,16 +60,22 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!validateForm()) return;
-    if (!database) {
+    console.log('Registration started');
+    if (!validateForm()) {
+      console.log('Form validation failed');
+      return;
+    }
+    if (!db) {
+      console.log('Database not available');
       Alert.alert('Error', 'Database not initialized');
       return;
     }
 
+    console.log('Starting registration process...');
     setLoading(true);
     try {
       // Check if username already exists
-      const existingUser = await database.getFirstAsync(
+      const existingUser = await db.getFirstAsync(
         'SELECT id FROM users WHERE username = ?',
         [formData.username]
       );
@@ -72,12 +86,14 @@ export default function RegisterScreen() {
         return;
       }
 
-      // Insert new user
-      await database.runAsync(
+      // Hash password and insert new user
+      const hashedPassword = await hashPassword(formData.password);
+      await db.runAsync(
         'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-        [formData.username, formData.password, formData.role]
+        [formData.username, hashedPassword, formData.role]
       );
 
+      console.log('User registered successfully');
       Alert.alert(
         'Success',
         'Account created successfully! You can now log in.',
@@ -85,7 +101,7 @@ export default function RegisterScreen() {
       );
     } catch (error) {
       console.error('Registration error:', error);
-      Alert.alert('Error', 'Failed to create account. Please try again.');
+      Alert.alert('Error', `Failed to create account: ${error}`);
     } finally {
       setLoading(false);
     }

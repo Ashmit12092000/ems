@@ -45,8 +45,8 @@ export default function LeaveRequestScreen() {
 
       // Create notification for admin
       await db.runAsync(
-        'INSERT INTO notifications (user_id, message) VALUES (?, ?)',
-        [1, `New leave request from ${user.username} for ${dateString}`]
+        'INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)',
+        [1, 'New Leave Request', `New leave request from ${user.username} for ${dateString}`]
       );
 
       Alert.alert('Success', 'Leave request submitted successfully', [

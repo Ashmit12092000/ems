@@ -45,8 +45,8 @@ export default function ShiftRequestScreen() {
 
       // Create notification for admin
       await db.runAsync(
-        'INSERT INTO notifications (user_id, message) VALUES (?, ?)',
-        [1, `New shift change request from ${user.username} for ${dateString}`]
+        'INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)',
+        [1, 'New Shift Request', `New shift change request from ${user.username} for ${dateString}`]
       );
 
       Alert.alert('Success', 'Shift change request submitted successfully', [
