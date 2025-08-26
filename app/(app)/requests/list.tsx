@@ -1,416 +1,205 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-} from 'react-native';
-import { useDatabase } from '../../../context/DatabaseContext';
-import { useAuth } from '../../../context/AuthContext';
-import { Colors, Typography, Spacing, BorderRadius } from '../../../theme/theme';
-import { FontAwesome5 } from '@expo/vector-icons';
-import { ModernCard } from '../../../components/ui/ModernCard';
-import { ModernButton } from '../../../components/ui/ModernButton';
-import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+// File: app/(app)/requests/list.tsx
+// Updated to create a notification when an HOD approves or rejects a request.
 
-interface RequestItem {
-  id: number;
-  user_id: number;
-  type: string;
-  status: string;
-  date?: string;
-  start_date?: string;
-  end_date?: string;
-  start_time?: string;
-  end_time?: string;
-  current_shift?: string;
-  requested_shift?: string;
-  reason: string;
-  created_at: string;
-  username?: string;
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { useAuth } from '../../../context/AuthContext';
+import { useDatabase } from '../../../context/DatabaseContext';
+import { useFocusEffect } from 'expo-router';
+import { Colors, Sizing, Typography } from '../../../theme/theme';
+import Animated, { FadeInUp } from 'react-native-reanimated';
+
+interface Request {
+    id: number;
+    user_id: number; // Important for creating notifications
+    type: string;
+    reason: string;
+    date: string;
+    status: 'pending' | 'approved' | 'rejected';
+    username?: string;
 }
 
-const statusColors = {
-  Pending: Colors.warning,
-  Approved: Colors.success,
-  Rejected: Colors.error,
-};
-
-const statusIcons = {
-  Pending: 'clock',
-  Approved: 'check-circle',
-  Rejected: 'times-circle',
-};
-
 export default function RequestListScreen() {
-  const { db } = useDatabase();
   const { user } = useAuth();
-  const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<RequestItem[]>([]);
+  const { db } = useDatabase();
+  const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const isHOD = user?.role === 'HOD';
 
-  useEffect(() => {
-    fetchRequests();
-  }, [db, user]);
-
-  useEffect(() => {
-    filterRequests();
-  }, [requests, selectedFilter]);
-
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     if (!db || !user) return;
-
+    setLoading(true);
     try {
-      // Get all request types with user information
-      const leaveRequests = await db.getAllAsync(
-        `SELECT l.*, u.username, 'Leave' as type FROM leave_requests l 
-         JOIN users u ON l.user_id = u.id 
-         ORDER BY l.created_at DESC`
-      ) as RequestItem[];
-
-      const permissionRequests = await db.getAllAsync(
-        `SELECT p.*, u.username, 'Permission' as type FROM permission_requests p 
-         JOIN users u ON p.user_id = u.id 
-         ORDER BY p.created_at DESC`
-      ) as RequestItem[];
-
-      const shiftRequests = await db.getAllAsync(
-        `SELECT s.*, u.username, 'Shift' as type FROM shift_requests s 
-         JOIN users u ON s.user_id = u.id 
-         ORDER BY s.created_at DESC`
-      ) as RequestItem[];
-
-      // Combine all requests and sort by creation date
-      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      setRequests(allRequests);
+        let result: Request[];
+        if (isHOD) {
+            const query = `SELECT r.*, u.username FROM requests r JOIN users u ON r.user_id = u.id WHERE r.status = 'pending' ORDER BY r.id DESC;`;
+            result = await db.getAllAsync<Request>(query);
+        } else {
+            const query = 'SELECT * FROM requests WHERE user_id = ? ORDER BY id DESC;';
+            result = await db.getAllAsync<Request>(query, user.id);
+        }
+        setRequests(result);
     } catch (error) {
-      console.error('Error fetching requests:', error);
-      Alert.alert('Error', 'Failed to load requests');
+        console.error('Error fetching requests:', error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+        setLoading(false);
+        setRefreshing(false);
+    }
+  }, [db, user, isHOD]);
+
+  useFocusEffect(useCallback(() => { fetchRequests(); }, [fetchRequests]));
+
+  const handleUpdateRequest = async (request: Request, status: 'approved' | 'rejected') => {
+    if (!db) return;
+    try {
+        // Use a transaction to ensure both actions succeed or fail together
+        await db.withTransactionAsync(async () => {
+            // 1. Update the request status
+            await db.runAsync('UPDATE requests SET status = ? WHERE id = ?;', status, request.id);
+            
+            // 2. Create a notification for the employee
+            const message = `Your ${request.type.replace('_', ' ')} request for ${request.date} has been ${status}.`;
+            await db.runAsync(
+                'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
+                request.user_id,
+                message
+            );
+        });
+        fetchRequests(); // Refresh the list of pending requests
+    } catch (error) {
+        console.error(`Error updating request:`, error);
     }
   };
 
-  const filterRequests = () => {
-    if (selectedFilter === 'all') {
-      setFilteredRequests(requests);
-    } else {
-      const filtered = requests.filter(request => 
-        request.status.toLowerCase() === selectedFilter.toLowerCase()
-      );
-      setFilteredRequests(filtered);
-    }
+  const getStatusStyle = (status: string) => {
+    if (status === 'approved') return { container: styles.statusApproved, text: styles.statusTextApproved };
+    if (status === 'rejected') return { container: styles.statusRejected, text: styles.statusTextRejected };
+    return { container: styles.statusPending, text: styles.statusTextPending };
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchRequests();
-  };
-
-  const getRequestDetails = (request: RequestItem) => {
-    switch (request.type) {
-      case 'Leave':
-        return `${request.start_date} to ${request.end_date}`;
-      case 'Permission':
-        return `${request.date} (${request.start_time} - ${request.end_time})`;
-      case 'Shift':
-        return `${request.date} (${request.current_shift} → ${request.requested_shift})`;
-      default:
-        return request.date || 'No date specified';
-    }
-  };
-
-  const getRequestIcon = (type: string) => {
-    switch (type) {
-      case 'Leave':
-        return 'calendar-times';
-      case 'Permission':
-        return 'user-clock';
-      case 'Shift':
-        return 'exchange-alt';
-      default:
-        return 'file-alt';
-    }
-  };
-
-  const FilterButton = ({ filter, title, count }: { filter: typeof selectedFilter; title: string; count: number }) => (
-    <TouchableOpacity
-      style={[
-        styles.filterButton,
-        selectedFilter === filter && styles.activeFilterButton
-      ]}
-      onPress={() => setSelectedFilter(filter)}
-    >
-      <Text style={[
-        styles.filterButtonText,
-        selectedFilter === filter && styles.activeFilterButtonText
-      ]}>
-        {title} ({count})
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const renderRequest = ({ item }: { item: RequestItem }) => (
-    <Animated.View entering={FadeInDown}>
-      <ModernCard style={styles.requestCard}>
-        <View style={styles.requestHeader}>
-          <View style={styles.requestInfo}>
-            <View style={styles.requestTypeRow}>
-              <FontAwesome5 
-                name={getRequestIcon(item.type)} 
-                size={16} 
-                color={Colors.primary} 
-              />
-              <Text style={styles.requestType}>{item.type} Request</Text>
+  const renderItem = ({ item, index }: { item: Request, index: number }) => {
+    const statusStyle = getStatusStyle(item.status);
+    return (
+        <Animated.View entering={FadeInUp.duration(500).delay(index * 50)}>
+            <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>{item.type.replace('_', ' ')} Request</Text>
+                    <View style={[styles.statusBadge, statusStyle.container]}>
+                        <Text style={[styles.statusText, statusStyle.text]}>{item.status}</Text>
+                    </View>
+                </View>
+                {isHOD && <Text style={styles.detailText}>Employee: <Text style={{fontWeight: 'bold'}}>{item.username}</Text></Text>}
+                <Text style={styles.detailText}>Date: {item.date}</Text>
+                <Text style={styles.detailText}>Reason: {item.reason}</Text>
+                
+                {isHOD && item.status === 'pending' && (
+                    <View style={styles.actionsContainer}>
+                    <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => handleUpdateRequest(item, 'rejected')}>
+                        <Text style={styles.actionButtonText}>Reject</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateRequest(item, 'approved')}>
+                        <Text style={styles.actionButtonText}>Approve</Text>
+                    </TouchableOpacity>
+                    </View>
+                )}
             </View>
-            <Text style={styles.requestUser}>by {item.username}</Text>
-          </View>
-          <View style={[
-            styles.statusBadge, 
-            { backgroundColor: statusColors[item.status as keyof typeof statusColors] + '20' }
-          ]}>
-            <FontAwesome5 
-              name={statusIcons[item.status as keyof typeof statusIcons]} 
-              size={12} 
-              color={statusColors[item.status as keyof typeof statusColors]} 
-            />
-            <Text style={[
-              styles.statusText,
-              { color: statusColors[item.status as keyof typeof statusColors] }
-            ]}>
-              {item.status}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.requestDetails}>
-          <View style={styles.detailRow}>
-            <FontAwesome5 name="calendar" size={14} color={Colors.textSecondary} />
-            <Text style={styles.detailText}>{getRequestDetails(item)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <FontAwesome5 name="comment" size={14} color={Colors.textSecondary} />
-            <Text style={styles.detailText} numberOfLines={2}>{item.reason}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <FontAwesome5 name="clock" size={14} color={Colors.textSecondary} />
-            <Text style={styles.detailText}>
-              Submitted: {new Date(item.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-        </View>
-      </ModernCard>
-    </Animated.View>
-  );
-
-  const getFilterCounts = () => {
-    return {
-      all: requests.length,
-      pending: requests.filter(r => r.status === 'Pending').length,
-      approved: requests.filter(r => r.status === 'Approved').length,
-      rejected: requests.filter(r => r.status === 'Rejected').length,
-    };
-  };
-
-  const filterCounts = getFilterCounts();
+        </Animated.View>
+    );
+  }
+  
+  if (loading && !refreshing) {
+    return <ActivityIndicator size="large" style={{ flex: 1 }} color={Colors.primary} />;
+  }
 
   return (
-    <View style={styles.container}>
-      <Animated.View entering={FadeInUp} style={styles.header}>
-        <View style={styles.headerIcon}>
-          <FontAwesome5 name="clipboard-list" size={32} color={Colors.primary} />
-        </View>
-        <Text style={styles.title}>All Requests</Text>
-        <Text style={styles.subtitle}>Complete overview of employee requests</Text>
-      </Animated.View>
-
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
-        <FilterButton filter="all" title="All" count={filterCounts.all} />
-        <FilterButton filter="pending" title="Pending" count={filterCounts.pending} />
-        <FilterButton filter="approved" title="Approved" count={filterCounts.approved} />
-        <FilterButton filter="rejected" title="Rejected" count={filterCounts.rejected} />
-      </View>
-
-      {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <FontAwesome5 name="spinner" size={32} color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading requests...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredRequests}
-          renderItem={renderRequest}
-          keyExtractor={(item) => `${item.type}-${item.id}`}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <Animated.View entering={FadeInDown} style={styles.emptyContainer}>
-              <FontAwesome5 name="inbox" size={64} color={Colors.textSecondary} />
-              <Text style={styles.emptyTitle}>No requests found</Text>
-              <Text style={styles.emptySubtitle}>
-                {selectedFilter === 'all' 
-                  ? 'No requests have been submitted yet'
-                  : `No ${selectedFilter} requests found`}
-              </Text>
-            </Animated.View>
-          }
-        />
-      )}
-    </View>
+    <FlatList
+      data={requests}
+      renderItem={renderItem}
+      keyExtractor={item => item.id.toString()}
+      contentContainerStyle={styles.container}
+      ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>No requests found.</Text></View>}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchRequests} />}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.backgroundSecondary,
-  },
-  header: {
-    padding: Spacing.lg,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  headerIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
-  },
-  title: {
-    ...Typography.headingLarge,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.bodyMedium,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    padding: Spacing.md,
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.backgroundSecondary,
-    alignItems: 'center',
-  },
-  activeFilterButton: {
-    backgroundColor: Colors.primary,
-  },
-  filterButtonText: {
-    ...Typography.labelSmall,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  activeFilterButtonText: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: Spacing.lg,
-  },
-  requestCard: {
-    marginBottom: Spacing.md,
-    padding: Spacing.lg,
-  },
-  requestHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.md,
-  },
-  requestInfo: {
-    flex: 1,
-  },
-  requestTypeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginBottom: Spacing.xs,
-  },
-  requestType: {
-    ...Typography.labelLarge,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  requestUser: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.full,
-    gap: Spacing.xs,
-  },
-  statusText: {
-    ...Typography.labelSmall,
-    fontWeight: '600',
-  },
-  requestDetails: {
-    gap: Spacing.sm,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-  },
-  detailText: {
-    ...Typography.bodyMedium,
-    color: Colors.textPrimary,
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  loadingText: {
-    ...Typography.bodyMedium,
-    color: Colors.textSecondary,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: Spacing.xxl,
-    gap: Spacing.md,
-  },
-  emptyTitle: {
-    ...Typography.headingMedium,
-    color: Colors.textPrimary,
-  },
-  emptySubtitle: {
-    ...Typography.bodyMedium,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
+    container: {
+        padding: Sizing.padding,
+        backgroundColor: Colors.background,
+        flexGrow: 1,
+    },
+    card: {
+        backgroundColor: Colors.white,
+        borderRadius: Sizing.borderRadius,
+        padding: Sizing.padding,
+        marginBottom: Sizing.margin,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    cardTitle: {
+        ...Typography.h2,
+        fontSize: 18,
+        textTransform: 'capitalize',
+    },
+    detailText: {
+        ...Typography.body,
+        marginBottom: 5,
+    },
+    statusBadge: {
+        paddingVertical: 4,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+    },
+    statusText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+    },
+    statusPending: { backgroundColor: '#FFFBE6' },
+    statusTextPending: { color: '#FFAB00' },
+    statusApproved: { backgroundColor: '#E6FFFA' },
+    statusTextApproved: { color: '#36B37E' },
+    statusRejected: { backgroundColor: '#FFEBE6' },
+    statusTextRejected: { color: '#FF5630' },
+    actionsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 15,
+        borderTopWidth: 1,
+        borderTopColor: Colors.border,
+        paddingTop: 15,
+    },
+    actionButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 20,
+        borderRadius: Sizing.borderRadius,
+        marginLeft: 10,
+    },
+    approveButton: { backgroundColor: Colors.success },
+    rejectButton: { backgroundColor: Colors.danger },
+    actionButtonText: {
+        color: Colors.white,
+        fontWeight: 'bold',
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 100,
+    },
+    emptyText: {
+        ...Typography.body,
+        fontSize: 16,
+    },
 });

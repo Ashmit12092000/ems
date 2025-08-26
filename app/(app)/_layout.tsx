@@ -1,109 +1,62 @@
-import { Tabs } from 'expo-router';
-import { useAuth } from '../../context/AuthContext';
+// File: app/_layout.tsx
+// This file contains the master navigation logic to prevent redirect loops.
+
+import React from 'react';
+import { AuthProvider, useAuth } from '../../context/AuthContext';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { DatabaseProvider } from '../../context/DatabaseContext';
+import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '../../theme/theme';
-import { Ionicons } from '@expo/vector-icons';
 
-export default function AppLayout() {
-  const { user } = useAuth();
+const InitialLayout = () => {
+  const { user, isAuthReady } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
-  const employeeTabs = [
-    {
-      name: 'home',
-      title: 'Home',
-      icon: 'home' as const,
-    },
-    {
-      name: 'requests',
-      title: 'Requests',
-      icon: 'document-text' as const,
-    },
-    {
-      name: 'notifications',
-      title: 'Notifications',
-      icon: 'notifications' as const,
-    },
-    {
-      name: 'profile',
-      title: 'Profile',
-      icon: 'person' as const,
-    },
-  ];
+  useEffect(() => {
+    // Wait until the authentication state is actually ready
+    if (!isAuthReady) {
+      return;
+    }
 
-  const hodTabs = [
-    {
-      name: 'home',
-      title: 'Home',
-      icon: 'home' as const,
-    },
-    {
-      name: 'requests',
-      title: 'Requests',
-      icon: 'document-text' as const,
-      href: '/requests/list', // Direct HOD to request list
-    },
-    {
-      name: 'notifications',
-      title: 'Notifications',
-      icon: 'notifications' as const,
-    },
-    {
-      name: 'admin',
-      title: 'Admin',
-      icon: 'settings' as const,
-    },
-    {
-      name: 'profile',
-      title: 'Profile',
-      icon: 'person' as const,
-    },
-  ];
+    const inAuthGroup = segments[0] === '(auth)';
 
-  const tabs = user?.role === 'HOD' ? hodTabs : employeeTabs;
+    // If we have a user but are still in the auth screens (e.g., login),
+    // navigate away to the dashboard.
+    if (user && inAuthGroup) {
+      router.replace('/home');
+    } 
+    // If we have NO user and are NOT in the auth screens,
+    // it means we are in a protected area, so navigate back to login.
+    else if (!user && !inAuthGroup) {
+      router.replace('/login');
+    }
+  }, [user, isAuthReady, segments, router]);
 
+  // While the authentication state is being determined, show a loading screen.
+  // This prevents any screen from rendering and causing a white screen or navigation loop.
+  if (!isAuthReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  // Once ready, render the currently active route.
+  return <Slot />;
+};
+
+export default function RootLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textSecondary,
-        tabBarStyle: {
-          backgroundColor: Colors.background,
-          borderTopWidth: 1,
-          borderTopColor: Colors.border,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 70,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-          marginTop: 4,
-        },
-        headerStyle: {
-          backgroundColor: Colors.background,
-          borderBottomWidth: 1,
-          borderBottomColor: Colors.border,
-        },
-        headerTitleStyle: {
-          fontSize: 18,
-          fontWeight: '600',
-          color: Colors.textPrimary,
-        },
-        headerTintColor: Colors.primary,
-      }}
-    >
-      {tabs.map((tab) => (
-        <Tabs.Screen
-          key={tab.name}
-          name={tab.name}
-          options={{
-            title: tab.title,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name={tab.icon} size={size || 24} color={color} />
-            ),
-            href: tab.href || undefined,
-          }}
-        />
-      ))}
-    </Tabs>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <DatabaseProvider>
+        <AuthProvider>
+          <InitialLayout />
+        </AuthProvider>
+      </DatabaseProvider>
+    </GestureHandlerRootView>
   );
 }

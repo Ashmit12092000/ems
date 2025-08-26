@@ -1,56 +1,41 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
+// File: app/_layout.tsx
+// This file remains the same, setting up the core providers.
+
+import React from 'react';
+import { AuthProvider, useAuth } from '../context/AuthContext';
+import { Slot, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DatabaseProvider } from '../context/DatabaseContext';
-import { AuthProvider } from '../context/AuthContext';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
-function AppContent() {
-  return (
-    <Stack screenOptions={{
-      headerShown: false,
-      animation: 'slide_from_right',
-      animationDuration: 300,
-    }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(app)" />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="+not-found" />
-    </Stack>
-  );
-}
-
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+const InitialLayout = () => {
+  const { user, isAuthReady } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    if (!isAuthReady) return;
+
+    const inAppGroup = segments[0] === '(app)';
+
+    if (user && !inAppGroup) {
+      router.replace('/home');
+    } else if (!user && inAppGroup) {
+      router.replace('/login');
     }
-  }, [loaded]);
+  }, [user, isAuthReady, segments]);
 
-  if (!loaded) {
-    return null;
-  }
+  return <Slot />;
+};
 
+export default function RootLayout() {
   return (
-    <DatabaseProvider>
-      <AuthProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <AppContent />
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </AuthProvider>
-    </DatabaseProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <DatabaseProvider>
+        <AuthProvider>
+          <InitialLayout />
+        </AuthProvider>
+      </DatabaseProvider>
+    </GestureHandlerRootView>
   );
 }
