@@ -23,6 +23,7 @@ export default function RequestsLayout() {
       <Stack.Screen name="shift" options={{ title: 'Shift Change Request' }} />
       <Stack.Screen name="list" options={{ title: 'All Requests' }} />
       <Stack.Screen name="my-requests" options={{ title: 'My Requests' }} />
+      <Stack.Screen name="[id]" options={{ title: 'Request Details' }} />
     </Stack>
   );
 }

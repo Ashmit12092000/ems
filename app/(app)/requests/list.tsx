@@ -5,7 +5,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useDatabase } from '../../../context/DatabaseContext';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors, Sizing, Typography } from '../../../theme/theme';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
@@ -22,6 +22,7 @@ interface Request {
 export default function RequestListScreen() {
   const { user } = useAuth();
   const { db } = useDatabase();
+  const router = useRouter();
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -139,12 +140,26 @@ export default function RequestListScreen() {
                 
                 {isHOD && item.status === 'pending' && (
                     <View style={styles.actionsContainer}>
-                    <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => handleUpdateRequest(item, 'rejected')}>
-                        <Text style={styles.actionButtonText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateRequest(item, 'approved')}>
-                        <Text style={styles.actionButtonText}>Approve</Text>
-                    </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[styles.actionButton, styles.viewButton]} 
+                            onPress={() => router.push(`/requests/${item.id}`)}
+                        >
+                            <Text style={styles.viewButtonText}>View Details</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionButtonsRow}>
+                            <TouchableOpacity 
+                                style={[styles.actionButton, styles.rejectButton]} 
+                                onPress={() => handleUpdateRequest(item, 'rejected')}
+                            >
+                                <Text style={styles.actionButtonText}>Reject</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.actionButton, styles.approveButton]} 
+                                onPress={() => handleUpdateRequest(item, 'approved')}
+                            >
+                                <Text style={styles.actionButtonText}>Approve</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 )}
             </View>
@@ -217,24 +232,45 @@ const styles = StyleSheet.create({
     statusRejected: { backgroundColor: '#FFEBE6' },
     statusTextRejected: { color: '#FF5630' },
     actionsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
         marginTop: 15,
         borderTopWidth: 1,
         borderTopColor: Colors.border,
         paddingTop: 15,
+        gap: 10,
     },
     actionButton: {
-        paddingVertical: 8,
+        paddingVertical: 10,
         paddingHorizontal: 20,
         borderRadius: Sizing.borderRadius,
-        marginLeft: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    approveButton: { backgroundColor: Colors.success },
-    rejectButton: { backgroundColor: Colors.danger },
+    actionButtonsRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    viewButton: { 
+        backgroundColor: Colors.primary,
+        width: '100%',
+    },
+    viewButtonText: {
+        color: Colors.white,
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    approveButton: { 
+        backgroundColor: Colors.success,
+        flex: 1,
+    },
+    rejectButton: { 
+        backgroundColor: Colors.danger,
+        flex: 1,
+    },
     actionButtonText: {
         color: Colors.white,
         fontWeight: 'bold',
+        fontSize: 14,
+        textAlign: 'center',
     },
     emptyContainer: {
         flex: 1,
