@@ -46,10 +46,10 @@ export default function LeaveRequestScreen() {
       }
 
       await db.runAsync(
-        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?);',
-        user.id, 'leave', formattedDate, reason, 'pending'
+        'INSERT INTO leave_requests (user_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, ?);',
+        user.id, formattedDate, formattedDate, reason, 'pending'
       );
-      
+
       Alert.alert('Success', 'Your leave request has been submitted.');
       router.back();
     } catch (error) {

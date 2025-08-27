@@ -13,6 +13,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 export default function ShiftRequestScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [currentShift, setCurrentShift] = useState('Morning');
+  const [requestedShift, setRequestedShift] = useState('Evening');
   const [reason, setReason] = useState('');
   const { user } = useAuth();
   const { db } = useDatabase();
@@ -37,8 +39,8 @@ export default function ShiftRequestScreen() {
 
     try {
       await db.runAsync(
-        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?);',
-        user.id, 'shift_adjustment', formattedDate, reason, 'pending'
+        'INSERT INTO shift_requests (user_id, date, current_shift, requested_shift, reason, status) VALUES (?, ?, ?, ?, ?, ?);',
+        [user.id, formattedDate, currentShift, requestedShift, reason, 'pending']
       );
       
       Alert.alert('Success', 'Your shift adjustment request has been submitted.');
@@ -66,6 +68,24 @@ export default function ShiftRequestScreen() {
           onChange={onDateChange}
         />
       )}
+
+      <Text style={Typography.label}>Current Shift</Text>
+      <TextInput
+        style={styles.shiftInput}
+        placeholder="Morning"
+        placeholderTextColor={Colors.lightText}
+        value={currentShift}
+        onChangeText={setCurrentShift}
+      />
+
+      <Text style={Typography.label}>Requested Shift</Text>
+      <TextInput
+        style={styles.shiftInput}
+        placeholder="Evening"
+        placeholderTextColor={Colors.lightText}
+        value={requestedShift}
+        onChangeText={setRequestedShift}
+      />
 
       <Text style={Typography.label}>Reason for Adjustment</Text>
       <TextInput
@@ -103,6 +123,16 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.darkText,
     marginLeft: 10,
+  },
+  shiftInput: {
+    backgroundColor: Colors.white,
+    borderRadius: Sizing.borderRadius,
+    padding: Sizing.padding,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Sizing.margin,
+    ...Typography.body,
+    color: Colors.darkText,
   },
   textArea: {
     backgroundColor: Colors.white,

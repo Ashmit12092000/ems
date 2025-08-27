@@ -31,10 +31,42 @@ export default function RequestListScreen() {
     if (!db || !user) return;
     setLoading(true);
     try {
-        let result: Request[];
+        let result: Request[] = [];
         if (isHOD) {
-            const query = `SELECT r.*, u.username FROM requests r JOIN users u ON r.user_id = u.id WHERE r.status = 'pending' ORDER BY r.id DESC;`;
-            result = await db.getAllAsync<Request>(query);
+            // Get leave requests
+            const leaveRequests = await db.getAllAsync<Request>(
+              `SELECT lr.*, u.username, 'Leave' as type FROM leave_requests lr 
+               JOIN users u ON lr.user_id = u.id 
+               WHERE lr.status = 'pending' ORDER BY lr.created_at DESC`
+            );
+
+            // Get permission requests
+            const permissionRequests = await db.getAllAsync<Request>(
+              `SELECT pr.*, u.username, 'Permission' as type FROM permission_requests pr 
+               JOIN users u ON pr.user_id = u.id 
+               WHERE pr.status = 'pending' ORDER BY pr.created_at DESC`
+            );
+
+            // Get shift requests
+            const shiftRequests = await db.getAllAsync<Request>(
+              `SELECT sr.*, u.username, 'Shift' as type FROM shift_requests sr 
+               JOIN users u ON sr.user_id = u.id 
+               WHERE sr.status = 'pending' ORDER BY sr.created_at DESC`
+            );
+
+            // Get old requests from legacy table (no created_at column)
+            const oldRequests = await db.getAllAsync<Request>(
+              `SELECT r.*, u.username FROM requests r 
+               JOIN users u ON r.user_id = u.id 
+               WHERE r.status = 'pending' ORDER BY r.id DESC`
+            );
+
+            result = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...oldRequests]
+              .sort((a, b) => {
+                const dateA = a.created_at ? new Date(a.created_at) : new Date(a.date);
+                const dateB = b.created_at ? new Date(b.created_at) : new Date(b.date);
+                return dateB.getTime() - dateA.getTime();
+              });
         } else {
             const query = 'SELECT * FROM requests WHERE user_id = ? ORDER BY id DESC;';
             result = await db.getAllAsync<Request>(query, user.id);
@@ -55,11 +87,23 @@ export default function RequestListScreen() {
     try {
         // Use a transaction to ensure both actions succeed or fail together
         await db.withTransactionAsync(async () => {
-            // 1. Update the request status
-            await db.runAsync('UPDATE requests SET status = ? WHERE id = ?;', status, request.id);
+            // 1. Update the request status in the appropriate table
+            let tableName = 'requests';
+            let dateField = request.date;
+            
+            if (request.type === 'Leave') {
+              tableName = 'leave_requests';
+              dateField = request.start_date || request.date;
+            } else if (request.type === 'Permission') {
+              tableName = 'permission_requests';
+            } else if (request.type === 'Shift') {
+              tableName = 'shift_requests';
+            }
+            
+            await db.runAsync(`UPDATE ${tableName} SET status = ? WHERE id = ?;`, status, request.id);
             
             // 2. Create a notification for the employee
-            const message = `Your ${request.type.replace('_', ' ')} request for ${request.date} has been ${status}.`;
+            const message = `Your ${request.type.replace('_', ' ')} request for ${dateField} has been ${status}.`;
             await db.runAsync(
                 'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
                 request.user_id,

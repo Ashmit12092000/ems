@@ -13,6 +13,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 export default function PermissionRequestScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
   const [reason, setReason] = useState('');
   const { user } = useAuth();
   const { db } = useDatabase();
@@ -37,8 +39,8 @@ export default function PermissionRequestScreen() {
 
     try {
       await db.runAsync(
-        'INSERT INTO requests (user_id, type, date, reason, status) VALUES (?, ?, ?, ?, ?);',
-        user.id, 'permission', formattedDate, reason, 'pending'
+        'INSERT INTO permission_requests (user_id, date, start_time, end_time, reason, status) VALUES (?, ?, ?, ?, ?, ?);',
+        [user.id, formattedDate, startTime, endTime, reason, 'pending']
       );
       
       Alert.alert('Success', 'Your permission request has been submitted.');
@@ -66,6 +68,24 @@ export default function PermissionRequestScreen() {
           onChange={onDateChange}
         />
       )}
+
+      <Text style={Typography.label}>Start Time</Text>
+      <TextInput
+        style={styles.timeInput}
+        placeholder="09:00"
+        placeholderTextColor={Colors.lightText}
+        value={startTime}
+        onChangeText={setStartTime}
+      />
+
+      <Text style={Typography.label}>End Time</Text>
+      <TextInput
+        style={styles.timeInput}
+        placeholder="17:00"
+        placeholderTextColor={Colors.lightText}
+        value={endTime}
+        onChangeText={setEndTime}
+      />
 
       <Text style={Typography.label}>Reason for Permission</Text>
       <TextInput
@@ -103,6 +123,16 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.darkText,
     marginLeft: 10,
+  },
+  timeInput: {
+    backgroundColor: Colors.white,
+    borderRadius: Sizing.borderRadius,
+    padding: Sizing.padding,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Sizing.margin,
+    ...Typography.body,
+    color: Colors.darkText,
   },
   textArea: {
     backgroundColor: Colors.white,
