@@ -44,6 +44,7 @@ export default function Home() {
             <Text style={styles.welcomeText}>Welcome back,</Text>
             <Text style={styles.userName}>{user?.username}</Text>
             <Text style={styles.userRole}>{user?.role}</Text>
+            
           </View>
           
           <TouchableOpacity 

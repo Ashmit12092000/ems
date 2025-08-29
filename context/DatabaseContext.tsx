@@ -101,6 +101,19 @@ export const DatabaseProvider = ({ children }: DatabaseProviderProps) => {
               created_at TEXT DEFAULT CURRENT_TIMESTAMP,
               FOREIGN KEY (user_id) REFERENCES users(id)
             );
+            CREATE TABLE IF NOT EXISTS shift_swaps (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, 
+              requester_id INTEGER, 
+              target_id INTEGER, 
+              date TEXT NOT NULL, 
+              requester_shift TEXT NOT NULL,
+              target_shift TEXT NOT NULL,
+              reason TEXT, 
+              status TEXT NOT NULL DEFAULT 'pending_target_approval' CHECK(status IN ('pending_target_approval', 'rejected_by_target', 'pending_hod_approval', 'rejected_by_system', 'approved', 'rejected_by_hod')),
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (requester_id) REFERENCES users(id),
+              FOREIGN KEY (target_id) REFERENCES users(id)
+            );
             CREATE TABLE IF NOT EXISTS monthly_limits (
               limit_type TEXT PRIMARY KEY, 
               value INTEGER NOT NULL

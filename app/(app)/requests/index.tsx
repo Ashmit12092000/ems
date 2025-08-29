@@ -96,6 +96,20 @@ export default function RequestsScreen() {
                 onPress={() => router.push('/requests/shift')}
                 color={Colors.info}
               />
+              <RequestCard
+                icon="sync-alt"
+                title="Shift Swap"
+                description="Swap shifts with another employee"
+                onPress={() => router.push('/requests/shift-swap')}
+                color={Colors.secondary}
+              />
+              <RequestCard
+                icon="reply"
+                title="Respond to Swaps"
+                description="Accept or decline swap requests"
+                onPress={() => router.push('/requests/swap-responses')}
+                color={Colors.info}
+              />
 
               <Text style={styles.sectionTitle}>My Requests</Text>
               <RequestCard

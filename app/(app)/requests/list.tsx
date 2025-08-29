@@ -55,6 +55,18 @@ export default function RequestListScreen() {
                WHERE sr.status = 'pending' ORDER BY sr.created_at DESC`
             );
 
+            // Get shift swap requests
+            const shiftSwapRequests = await db.getAllAsync<Request>(
+              `SELECT ss.*, ur.username, 'Shift Swap' as type, 
+                      ut.username as target_username,
+                      ss.requester_shift, ss.target_shift,
+                      ss.requester_id as user_id
+               FROM shift_swaps ss 
+               JOIN users ur ON ss.requester_id = ur.id 
+               JOIN users ut ON ss.target_id = ut.id
+               WHERE ss.status = 'pending_hod_approval' ORDER BY ss.created_at DESC`
+            );
+
             // Get old requests from legacy table (no created_at column)
             const oldRequests = await db.getAllAsync<Request>(
               `SELECT r.*, u.username FROM requests r 
@@ -62,7 +74,7 @@ export default function RequestListScreen() {
                WHERE r.status = 'pending' ORDER BY r.id DESC`
             );
 
-            result = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...oldRequests]
+            result = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests, ...oldRequests]
               .sort((a, b) => {
                 const dateA = a.created_at ? new Date(a.created_at) : new Date(a.date);
                 const dateB = b.created_at ? new Date(b.created_at) : new Date(b.date);
@@ -99,6 +111,44 @@ export default function RequestListScreen() {
               tableName = 'permission_requests';
             } else if (request.type === 'Shift') {
               tableName = 'shift_requests';
+            } else if (request.type === 'Shift Swap') {
+              tableName = 'shift_swaps';
+              // For shift swaps, notify both requester and target
+              const swapStatus = status === 'approved' ? 'approved' : 'rejected_by_hod';
+              await db.runAsync(`UPDATE ${tableName} SET status = ? WHERE id = ?;`, swapStatus, request.id);
+              
+              // Get swap details for notifications
+              const swapDetails = await db.getFirstAsync(
+                'SELECT requester_id, target_id, requester_shift, target_shift FROM shift_swaps WHERE id = ?;',
+                request.id
+              ) as { requester_id: number; target_id: number; requester_shift: string; target_shift: string };
+              
+              if (swapDetails) {
+                const swapMessage = `Your shift swap request for ${dateField} has been ${status} by HOD.`;
+                await db.runAsync(
+                  'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
+                  swapDetails.requester_id,
+                  swapMessage
+                );
+                await db.runAsync(
+                  'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
+                  swapDetails.target_id,
+                  swapMessage
+                );
+                
+                // If approved, update the duty roster
+                if (status === 'approved') {
+                  await db.runAsync(
+                    'UPDATE duty_roster SET shift_type = ? WHERE user_id = ? AND date = ?;',
+                    swapDetails.target_shift, swapDetails.requester_id, dateField
+                  );
+                  await db.runAsync(
+                    'UPDATE duty_roster SET shift_type = ? WHERE user_id = ? AND date = ?;',
+                    swapDetails.requester_shift, swapDetails.target_id, dateField
+                  );
+                }
+              }
+              return; // Skip the normal notification process
             }
             
             await db.runAsync(`UPDATE ${tableName} SET status = ? WHERE id = ?;`, status, request.id);
@@ -136,9 +186,15 @@ export default function RequestListScreen() {
                 </View>
                 {isHOD && <Text style={styles.detailText}>Employee: <Text style={{fontWeight: 'bold'}}>{item.username}</Text></Text>}
                 <Text style={styles.detailText}>Date: {item.date}</Text>
+                {item.type === 'Shift Swap' && (
+                  <>
+                    <Text style={styles.detailText}>Target Employee: <Text style={{fontWeight: 'bold'}}>{item.target_username}</Text></Text>
+                    <Text style={styles.detailText}>Swap: {item.requester_shift} ↔ {item.target_shift}</Text>
+                  </>
+                )}
                 <Text style={styles.detailText}>Reason: {item.reason}</Text>
                 
-                {isHOD && item.status === 'pending' && (
+                {isHOD && (item.status === 'pending' || item.status === 'pending_hod_approval') && (
                     <View style={styles.actionsContainer}>
                         <TouchableOpacity 
                             style={[styles.actionButton, styles.viewButton]} 

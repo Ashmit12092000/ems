@@ -12,7 +12,8 @@ export interface ValidationResult {
 export const validateRequest = async (
   db: SQLiteDatabase,
   userId: number,
-  requestDate: string
+  requestDate: string,
+  requestType: 'leave' | 'permission' | 'shift_swap' = 'leave'
 ): Promise<ValidationResult> => {
   try {
     const limitResult = await checkMonthlyLimit(db, userId, requestDate);
@@ -20,9 +21,13 @@ export const validateRequest = async (
       return limitResult;
     }
 
-    const rosterResult = await checkRosterConflict(db, userId, requestDate);
-    if (!rosterResult.passed) {
-      return rosterResult;
+    // For shift swaps, we expect employees to have duties scheduled (that's what they're swapping)
+    // So we skip the roster conflict check for shift swaps
+    if (requestType !== 'shift_swap') {
+      const rosterResult = await checkRosterConflict(db, userId, requestDate);
+      if (!rosterResult.passed) {
+        return rosterResult;
+      }
     }
 
     return { passed: true, message: 'Validation passed' };

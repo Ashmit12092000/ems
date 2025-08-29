@@ -59,17 +59,16 @@ export default function AppLayout() {
         }}
       />
       
-      {isHOD && (
-        <Tabs.Screen
-          name="admin"
-          options={{
-            title: 'Admin',
-            tabBarIcon: ({ color, size }) => (
-              <FontAwesome5 name="cog" size={size} color={color} />
-            ),
-          }}
-        />
-      )}
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome5 name="cog" size={size} color={color} />
+          ),
+          href: isHOD ? undefined : null,
+        }}
+      />
       
       {/* Hide notifications from tabs but keep it accessible via direct navigation */}
       <Tabs.Screen

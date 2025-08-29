@@ -28,6 +28,8 @@ interface RequestItem {
   end_time?: string;
   current_shift?: string;
   requested_shift?: string;
+  requester_shift?: string; // Added for shift swap
+  target_shift?: string; // Added for shift swap
   reason: string;
   created_at: string;
 }
@@ -60,11 +62,12 @@ export default function MyRequestsScreen() {
 
     try {
       console.log('Fetching requests for user:', user.id);
-      
+
       // Get only this user's requests with explicit error handling for each query
       let leaveRequests: RequestItem[] = [];
       let permissionRequests: RequestItem[] = [];
       let shiftRequests: RequestItem[] = [];
+      let shiftSwapRequests: RequestItem[] = []; // Added for shift swap
 
       try {
         leaveRequests = await db.getAllAsync(
@@ -96,7 +99,18 @@ export default function MyRequestsScreen() {
         console.error('Error fetching shift requests:', error);
       }
 
-      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests]
+      // Fetch shift swap requests
+      try {
+        shiftSwapRequests = await db.getAllAsync(
+          `SELECT *, 'Shift Swap' as type FROM shift_swaps WHERE requester_id = ? OR target_id = ? ORDER BY created_at DESC`,
+          [user.id, user.id]
+        ) as RequestItem[];
+        console.log('Shift swap requests found:', shiftSwapRequests.length);
+      } catch (error) {
+        console.error('Error fetching shift swap requests:', error);
+      }
+
+      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests]
         .sort((a, b) => {
           const dateA = new Date(a.created_at || a.date || 0);
           const dateB = new Date(b.created_at || b.date || 0);
@@ -151,6 +165,8 @@ export default function MyRequestsScreen() {
         return `${request.date} (${request.start_time || 'N/A'} - ${request.end_time || 'N/A'})`;
       case 'Shift':
         return `${request.date} (${request.current_shift || 'N/A'} → ${request.requested_shift || 'N/A'})`;
+      case 'Shift Swap':
+        return `${request.date} (${request.requester_shift || 'N/A'} ↔ ${request.target_shift || 'N/A'})`;
       default:
         return request.date || request.start_date || 'No date specified';
     }
@@ -164,7 +180,8 @@ export default function MyRequestsScreen() {
         return 'user-clock';
       case 'Shift':
         return 'exchange-alt';
-      
+      case 'Shift Swap': // Added for shift swap
+        return 'exchange-alt';
       default:
         return 'file-alt';
     }

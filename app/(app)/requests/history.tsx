@@ -29,6 +29,9 @@ interface RequestItem {
   end_time?: string;
   current_shift?: string;
   requested_shift?: string;
+  requester_shift?: string;
+  target_shift?: string;
+  target_username?: string;
   reason: string;
   created_at: string;
   username?: string;
@@ -83,6 +86,19 @@ export default function RequestHistoryScreen() {
          ORDER BY sr.created_at DESC`
       ) as RequestItem[];
 
+      // Get shift swap requests
+      const shiftSwapRequests = await db.getAllAsync(
+        `SELECT ss.*, ur.username, 'Shift Swap' as type, 
+                ut.username as target_username,
+                ss.requester_shift, ss.target_shift,
+                ss.requester_id as user_id
+         FROM shift_swaps ss 
+         JOIN users ur ON ss.requester_id = ur.id 
+         JOIN users ut ON ss.target_id = ut.id
+         WHERE ss.status IN ('approved', 'rejected') 
+         ORDER BY ss.created_at DESC`
+      ) as RequestItem[];
+
       // Get old requests from the legacy table (no created_at column)
       const oldRequests = await db.getAllAsync(
         `SELECT r.*, u.username, r.date as created_at FROM requests r 
@@ -91,7 +107,7 @@ export default function RequestHistoryScreen() {
          ORDER BY r.id DESC`
       ) as RequestItem[];
 
-      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...oldRequests]
+      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests, ...oldRequests]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setRequests(allRequests);
@@ -122,6 +138,8 @@ export default function RequestHistoryScreen() {
         return `${request.date} (${request.start_time} - ${request.end_time})`;
       case 'Shift':
         return `${request.date} (${request.current_shift} → ${request.requested_shift})`;
+      case 'Shift Swap':
+        return `${request.date} (${request.requester_shift} ↔ ${request.target_shift})`;
       default:
         return request.date || 'No date specified';
     }
@@ -135,6 +153,8 @@ export default function RequestHistoryScreen() {
         return 'user-clock';
       case 'Shift':
         return 'exchange-alt';
+      case 'Shift Swap':
+        return 'sync-alt';
       default:
         return 'file-alt';
     }

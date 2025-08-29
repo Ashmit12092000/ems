@@ -21,6 +21,8 @@ export default function RequestsLayout() {
       <Stack.Screen name="leave" options={{ title: 'Leave Request' }} />
       <Stack.Screen name="permission" options={{ title: 'Permission Request' }} />
       <Stack.Screen name="shift" options={{ title: 'Shift Change Request' }} />
+      <Stack.Screen name="shift-swap" options={{ title: 'Shift Swap Request' }} />
+      <Stack.Screen name="swap-responses" options={{ title: 'Swap Requests' }} />
       <Stack.Screen name="list" options={{ title: 'All Requests' }} />
       <Stack.Screen name="my-requests" options={{ title: 'My Requests' }} />
       <Stack.Screen name="[id]" options={{ title: 'Request Details' }} />

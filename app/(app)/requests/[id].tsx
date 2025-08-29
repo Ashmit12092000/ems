@@ -20,7 +20,10 @@ interface RequestDetails {
   end_time?: string;
   current_shift?: string;
   requested_shift?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  requester_shift?: string;
+  target_shift?: string;
+  target_username?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'pending_hod_approval';
   username?: string;
   created_at?: string;
 }
@@ -53,20 +56,39 @@ export default function RequestDetailScreen() {
         { table: 'leave_requests', type: 'Leave' },
         { table: 'permission_requests', type: 'Permission' },
         { table: 'shift_requests', type: 'Shift' },
+        { table: 'shift_swaps', type: 'Shift Swap' },
         { table: 'requests', type: 'General' }
       ];
 
       let foundRequest: RequestDetails | null = null;
 
       for (const { table, type } of tables) {
-        const query = `
-          SELECT r.*, u.username, '${type}' as type 
-          FROM ${table} r 
-          JOIN users u ON r.user_id = u.id 
-          WHERE r.id = ? AND r.status = 'pending'
-        `;
+        let query = '';
+        let queryParams = [];
         
-        const result = await db.getAllAsync<RequestDetails>(query, [id]);
+        if (table === 'shift_swaps') {
+          query = `
+            SELECT ss.*, ur.username, ut.username as target_username, 
+                   ss.requester_shift, ss.target_shift, ss.reason,
+                   ss.requester_id as user_id, '${type}' as type,
+                   ss.date
+            FROM ${table} ss 
+            JOIN users ur ON ss.requester_id = ur.id 
+            JOIN users ut ON ss.target_id = ut.id
+            WHERE ss.id = ? AND ss.status = 'pending_hod_approval'
+          `;
+          queryParams = [id];
+        } else {
+          query = `
+            SELECT r.*, u.username, '${type}' as type 
+            FROM ${table} r 
+            JOIN users u ON r.user_id = u.id 
+            WHERE r.id = ? AND r.status = 'pending'
+          `;
+          queryParams = [id];
+        }
+        
+        const result = await db.getAllAsync<RequestDetails>(query, queryParams);
         if (result.length > 0) {
           foundRequest = result[0];
           break;
@@ -112,6 +134,8 @@ export default function RequestDetailScreen() {
         tableName = 'permission_requests';
       } else if (request.type === 'Shift') {
         tableName = 'shift_requests';
+      } else if (request.type === 'Shift Swap') {
+        tableName = 'shift_swaps';
       }
 
       console.log('Using table:', tableName);
@@ -183,6 +207,8 @@ export default function RequestDetailScreen() {
         return `${request.date} (${request.start_time} - ${request.end_time})`;
       case 'Shift':
         return `${request.date} (${request.current_shift} → ${request.requested_shift})`;
+      case 'Shift Swap':
+        return `${request.date} (${request.requester_shift} ↔ ${request.target_shift})`;
       default:
         return request.date || 'No date specified';
     }
@@ -278,6 +304,26 @@ export default function RequestDetailScreen() {
               <FontAwesome5 name="arrow-right" size={16} color={Colors.primary} />
               <Text style={styles.detailLabel}>Requested Shift:</Text>
               <Text style={styles.detailValue}>{request.requested_shift}</Text>
+            </View>
+          </>
+        )}
+
+        {request.type === 'Shift Swap' && (
+          <>
+            <View style={styles.detailRow}>
+              <FontAwesome5 name="user-friends" size={16} color={Colors.primary} />
+              <Text style={styles.detailLabel}>Target Employee:</Text>
+              <Text style={styles.detailValue}>{request.target_username}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <FontAwesome5 name="exchange-alt" size={16} color={Colors.primary} />
+              <Text style={styles.detailLabel}>Requester's Shift:</Text>
+              <Text style={styles.detailValue}>{request.requester_shift}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <FontAwesome5 name="sync-alt" size={16} color={Colors.primary} />
+              <Text style={styles.detailLabel}>Target's Shift:</Text>
+              <Text style={styles.detailValue}>{request.target_shift}</Text>
             </View>
           </>
         )}
