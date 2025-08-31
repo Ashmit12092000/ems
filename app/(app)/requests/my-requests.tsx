@@ -47,7 +47,7 @@ const statusIcons = {
 };
 
 export default function MyRequestsScreen() {
-  const { db } = useDatabase();
+  const { supabaseClient } = useDatabase();
   const { user } = useAuth();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,67 +55,81 @@ export default function MyRequestsScreen() {
 
   useEffect(() => {
     fetchRequests();
-  }, [db, user]);
+  }, [supabaseClient, user]);
 
   const fetchRequests = async () => {
-    if (!db || !user) return;
+    if (!supabaseClient || !user) return;
 
     try {
       console.log('Fetching requests for user:', user.id);
+      let allRequests: RequestItem[] = [];
 
-      // Get only this user's requests with explicit error handling for each query
-      let leaveRequests: RequestItem[] = [];
-      let permissionRequests: RequestItem[] = [];
-      let shiftRequests: RequestItem[] = [];
-      let shiftSwapRequests: RequestItem[] = []; // Added for shift swap
-
+      // Get leave requests
       try {
-        leaveRequests = await db.getAllAsync(
-          `SELECT *, 'Leave' as type FROM leave_requests WHERE user_id = ? ORDER BY created_at DESC`,
-          [user.id]
-        ) as RequestItem[];
-        console.log('Leave requests found:', leaveRequests.length);
+        const { data: leaveRequests } = await supabaseClient
+          .from('leave_requests')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (leaveRequests) {
+          const formattedLeaveRequests = leaveRequests.map(req => ({
+            ...req,
+            type: 'Leave'
+          }));
+          allRequests.push(...formattedLeaveRequests);
+        }
+        console.log('Leave requests found:', leaveRequests?.length || 0);
       } catch (error) {
         console.error('Error fetching leave requests:', error);
       }
 
+      // Get permission requests
       try {
-        permissionRequests = await db.getAllAsync(
-          `SELECT *, 'Permission' as type FROM permission_requests WHERE user_id = ? ORDER BY created_at DESC`,
-          [user.id]
-        ) as RequestItem[];
-        console.log('Permission requests found:', permissionRequests.length);
+        const { data: permissionRequests } = await supabaseClient
+          .from('permission_requests')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (permissionRequests) {
+          const formattedPermissionRequests = permissionRequests.map(req => ({
+            ...req,
+            type: 'Permission'
+          }));
+          allRequests.push(...formattedPermissionRequests);
+        }
+        console.log('Permission requests found:', permissionRequests?.length || 0);
       } catch (error) {
         console.error('Error fetching permission requests:', error);
       }
 
+      // Get shift requests
       try {
-        shiftRequests = await db.getAllAsync(
-          `SELECT *, 'Shift' as type FROM shift_requests WHERE user_id = ? ORDER BY created_at DESC`,
-          [user.id]
-        ) as RequestItem[];
-        console.log('Shift requests found:', shiftRequests.length);
+        const { data: shiftRequests } = await supabaseClient
+          .from('shift_requests')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (shiftRequests) {
+          const formattedShiftRequests = shiftRequests.map(req => ({
+            ...req,
+            type: 'Shift'
+          }));
+          allRequests.push(...formattedShiftRequests);
+        }
+        console.log('Shift requests found:', shiftRequests?.length || 0);
       } catch (error) {
         console.error('Error fetching shift requests:', error);
       }
 
-      // Fetch shift swap requests
-      try {
-        shiftSwapRequests = await db.getAllAsync(
-          `SELECT *, 'Shift Swap' as type FROM shift_swaps WHERE requester_id = ? OR target_id = ? ORDER BY created_at DESC`,
-          [user.id, user.id]
-        ) as RequestItem[];
-        console.log('Shift swap requests found:', shiftSwapRequests.length);
-      } catch (error) {
-        console.error('Error fetching shift swap requests:', error);
-      }
-
-      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests]
-        .sort((a, b) => {
-          const dateA = new Date(a.created_at || a.date || 0);
-          const dateB = new Date(b.created_at || b.date || 0);
-          return dateB.getTime() - dateA.getTime();
-        });
+      // Sort all requests by created_at
+      allRequests.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.date || 0);
+        const dateB = new Date(b.created_at || b.date || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
 
       console.log('Total requests found:', allRequests.length);
       setRequests(allRequests);

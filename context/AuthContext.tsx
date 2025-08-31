@@ -1,17 +1,11 @@
+
 // File: context/AuthContext.tsx
-// This context manages the global authentication state, including user info and role.
-// It provides login, logout, and register functions that interact with the database.
+// Updated to use Supabase for authentication
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as Crypto from 'expo-crypto';
 import { useDatabase } from './DatabaseContext';
-
-// Define the shape of the user object
-interface User {
-  id: number;
-  username: string;
-  role: 'Employee' | 'HOD';
-}
+import { User } from '../lib/supabase';
 
 // Define the shape of the context's value
 interface AuthContextType {
@@ -37,7 +31,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const { db, isDbLoading } = useDatabase();
+  const { supabaseClient, isDbLoading } = useDatabase();
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
@@ -55,40 +49,51 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const register = async (username: string, password: string, role: string): Promise<boolean> => {
-    if (!db) return false;
     const hashedPassword = await hashPassword(password);
     try {
-      await db.runAsync(
-        'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?);',
-        username,
-        hashedPassword,
-        role
-      );
+      const { data, error } = await supabaseClient
+        .from('users')
+        .insert([
+          {
+            username,
+            password_hash: hashedPassword,
+            role: role as 'Employee' | 'HOD'
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Registration error:', error);
+        return false; // Likely a UNIQUE constraint failure on username
+      }
+
       return true;
     } catch (error) {
-      console.error('Registration DB error:', error);
-      return false; // Likely a UNIQUE constraint failure on username
+      console.error('Registration error:', error);
+      return false;
     }
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    if (!db) return false;
     const hashedPassword = await hashPassword(password);
     try {
-      // Use getFirstAsync to fetch the first matching row
-      const userData = await db.getFirstAsync<User>(
-        'SELECT * FROM users WHERE username = ? AND password_hash = ?;',
-        username,
-        hashedPassword
-      );
+      const { data, error } = await supabaseClient
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .eq('password_hash', hashedPassword)
+        .single();
 
-      if (userData) {
-        setUser(userData);
-        return true;
+      if (error || !data) {
+        console.error('Login error:', error);
+        return false;
       }
-      return false;
+
+      setUser(data as User);
+      return true;
     } catch (error) {
-      console.error('Login DB error:', error);
+      console.error('Login error:', error);
       return false;
     }
   };

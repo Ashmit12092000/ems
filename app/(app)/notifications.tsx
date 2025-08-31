@@ -12,43 +12,57 @@ import { Colors, Sizing, Typography } from '../../theme/theme';
 interface Notification {
     id: number;
     message: string;
-    is_read: number; // 0 for false, 1 for true
+    is_read: boolean;
     created_at: string;
 }
 
 export default function NotificationsScreen() {
     const { user } = useAuth();
-    const { db } = useDatabase();
+    const { supabaseClient } = useDatabase();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     const fetchNotifications = useCallback(async () => {
-        if (!db || !user) return;
+        if (!supabaseClient || !user) return;
         setLoading(true);
         try {
-            const result = await db.getAllAsync<Notification>(
-                'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC;',
-                user.id
-            );
-            setNotifications(result);
+            const { data: result, error } = await supabaseClient
+                .from('notifications')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching notifications:', error);
+            } else {
+                setNotifications(result || []);
+            }
         } catch (error) {
             console.error('Error fetching notifications:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [db, user]);
+    }, [supabaseClient, user]);
 
     useFocusEffect(useCallback(() => {
         fetchNotifications();
     }, [fetchNotifications]));
 
     const markAsRead = async (id: number) => {
-        if (!db) return;
+        if (!supabaseClient) return;
         try {
-            await db.runAsync('UPDATE notifications SET is_read = 1 WHERE id = ?;', id);
-            fetchNotifications(); // Refresh the list
+            const { error } = await supabaseClient
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', id);
+
+            if (error) {
+                console.error('Error marking notification as read:', error);
+            } else {
+                fetchNotifications(); // Refresh the list
+            }
         } catch (error) {
             console.error('Error marking notification as read:', error);
         }

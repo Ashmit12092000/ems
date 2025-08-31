@@ -10,18 +10,21 @@ import { Colors, Sizing, Typography } from '../../../theme/theme';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 interface Request {
-    id: number;
-    user_id: number; // Important for creating notifications
+    id: string;
+    user_id: string;
     type: string;
     reason: string;
     date: string;
+    start_date?: string;
+    end_date?: string;
     status: 'pending' | 'approved' | 'rejected';
     username?: string;
+    created_at?: string;
 }
 
 export default function RequestListScreen() {
   const { user } = useAuth();
-  const { db } = useDatabase();
+  const { supabaseClient } = useDatabase();
   const router = useRouter();
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,60 +32,64 @@ export default function RequestListScreen() {
   const isHOD = user?.role === 'HOD';
 
   const fetchRequests = useCallback(async () => {
-    if (!db || !user) return;
+    if (!supabaseClient || !user) return;
     setLoading(true);
     try {
         let result: Request[] = [];
         if (isHOD) {
-            // Get leave requests
-            const leaveRequests = await db.getAllAsync<Request>(
-              `SELECT lr.*, u.username, 'Leave' as type FROM leave_requests lr 
-               JOIN users u ON lr.user_id = u.id 
-               WHERE lr.status = 'pending' ORDER BY lr.created_at DESC`
-            );
+            // Get leave requests with usernames
+            const { data: leaveRequests } = await supabaseClient
+              .from('leave_requests')
+              .select(`
+                *,
+                users!inner(username)
+              `)
+              .eq('status', 'pending')
+              .order('created_at', { ascending: false });
 
-            // Get permission requests
-            const permissionRequests = await db.getAllAsync<Request>(
-              `SELECT pr.*, u.username, 'Permission' as type FROM permission_requests pr 
-               JOIN users u ON pr.user_id = u.id 
-               WHERE pr.status = 'pending' ORDER BY pr.created_at DESC`
-            );
+            // Get permission requests with usernames  
+            const { data: permissionRequests } = await supabaseClient
+              .from('permission_requests')
+              .select(`
+                *,
+                users!inner(username)
+              `)
+              .eq('status', 'pending')
+              .order('created_at', { ascending: false });
 
-            // Get shift requests
-            const shiftRequests = await db.getAllAsync<Request>(
-              `SELECT sr.*, u.username, 'Shift' as type FROM shift_requests sr 
-               JOIN users u ON sr.user_id = u.id 
-               WHERE sr.status = 'pending' ORDER BY sr.created_at DESC`
-            );
+            // Transform the data to match our interface
+            const transformedLeaveRequests = (leaveRequests || []).map(req => ({
+              ...req,
+              type: 'Leave',
+              username: req.users?.username,
+              date: req.start_date
+            }));
 
-            // Get shift swap requests
-            const shiftSwapRequests = await db.getAllAsync<Request>(
-              `SELECT ss.*, ur.username, 'Shift Swap' as type, 
-                      ut.username as target_username,
-                      ss.requester_shift, ss.target_shift,
-                      ss.requester_id as user_id
-               FROM shift_swaps ss 
-               JOIN users ur ON ss.requester_id = ur.id 
-               JOIN users ut ON ss.target_id = ut.id
-               WHERE ss.status = 'pending_hod_approval' ORDER BY ss.created_at DESC`
-            );
+            const transformedPermissionRequests = (permissionRequests || []).map(req => ({
+              ...req,
+              type: 'Permission',
+              username: req.users?.username
+            }));
 
-            // Get old requests from legacy table (no created_at column)
-            const oldRequests = await db.getAllAsync<Request>(
-              `SELECT r.*, u.username FROM requests r 
-               JOIN users u ON r.user_id = u.id 
-               WHERE r.status = 'pending' ORDER BY r.id DESC`
-            );
-
-            result = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests, ...oldRequests]
+            result = [...transformedLeaveRequests, ...transformedPermissionRequests]
               .sort((a, b) => {
-                const dateA = a.created_at ? new Date(a.created_at) : new Date(a.date);
-                const dateB = b.created_at ? new Date(b.created_at) : new Date(b.date);
+                const dateA = new Date(a.created_at || a.date);
+                const dateB = new Date(b.created_at || b.date);
                 return dateB.getTime() - dateA.getTime();
               });
         } else {
-            const query = 'SELECT * FROM requests WHERE user_id = ? ORDER BY id DESC;';
-            result = await db.getAllAsync<Request>(query, user.id);
+            // For employees, get their own requests
+            const { data: userRequests } = await supabaseClient
+              .from('leave_requests')
+              .select('*')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false });
+
+            result = (userRequests || []).map(req => ({
+              ...req,
+              type: 'Leave',
+              date: req.start_date
+            }));
         }
         setRequests(result);
     } catch (error) {
@@ -91,76 +98,45 @@ export default function RequestListScreen() {
         setLoading(false);
         setRefreshing(false);
     }
-  }, [db, user, isHOD]);
+  }, [supabaseClient, user, isHOD]);
 
   useFocusEffect(useCallback(() => { fetchRequests(); }, [fetchRequests]));
 
   const handleUpdateRequest = async (request: Request, status: 'approved' | 'rejected') => {
-    if (!db) return;
+    if (!supabaseClient) return;
     try {
-        // Use a transaction to ensure both actions succeed or fail together
-        await db.withTransactionAsync(async () => {
-            // 1. Update the request status in the appropriate table
-            let tableName = 'requests';
-            let dateField = request.date;
-            
-            if (request.type === 'Leave') {
-              tableName = 'leave_requests';
-              dateField = request.start_date || request.date;
-            } else if (request.type === 'Permission') {
-              tableName = 'permission_requests';
-            } else if (request.type === 'Shift') {
-              tableName = 'shift_requests';
-            } else if (request.type === 'Shift Swap') {
-              tableName = 'shift_swaps';
-              // For shift swaps, notify both requester and target
-              const swapStatus = status === 'approved' ? 'approved' : 'rejected_by_hod';
-              await db.runAsync(`UPDATE ${tableName} SET status = ? WHERE id = ?;`, swapStatus, request.id);
-              
-              // Get swap details for notifications
-              const swapDetails = await db.getFirstAsync(
-                'SELECT requester_id, target_id, requester_shift, target_shift FROM shift_swaps WHERE id = ?;',
-                request.id
-              ) as { requester_id: number; target_id: number; requester_shift: string; target_shift: string };
-              
-              if (swapDetails) {
-                const swapMessage = `Your shift swap request for ${dateField} has been ${status} by HOD.`;
-                await db.runAsync(
-                  'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
-                  swapDetails.requester_id,
-                  swapMessage
-                );
-                await db.runAsync(
-                  'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
-                  swapDetails.target_id,
-                  swapMessage
-                );
-                
-                // If approved, update the duty roster
-                if (status === 'approved') {
-                  await db.runAsync(
-                    'UPDATE duty_roster SET shift_type = ? WHERE user_id = ? AND date = ?;',
-                    swapDetails.target_shift, swapDetails.requester_id, dateField
-                  );
-                  await db.runAsync(
-                    'UPDATE duty_roster SET shift_type = ? WHERE user_id = ? AND date = ?;',
-                    swapDetails.requester_shift, swapDetails.target_id, dateField
-                  );
-                }
-              }
-              return; // Skip the normal notification process
-            }
-            
-            await db.runAsync(`UPDATE ${tableName} SET status = ? WHERE id = ?;`, status, request.id);
-            
-            // 2. Create a notification for the employee
-            const message = `Your ${request.type.replace('_', ' ')} request for ${dateField} has been ${status}.`;
-            await db.runAsync(
-                'INSERT INTO notifications (user_id, message) VALUES (?, ?);',
-                request.user_id,
-                message
-            );
-        });
+        // Update the request status in the appropriate table
+        let tableName = 'leave_requests';
+        let dateField = request.date;
+        
+        if (request.type === 'Leave') {
+          tableName = 'leave_requests';
+          dateField = request.start_date || request.date;
+        } else if (request.type === 'Permission') {
+          tableName = 'permission_requests';
+        }
+        
+        // Update the request status
+        const { error: updateError } = await supabaseClient
+          .from(tableName)
+          .update({ status })
+          .eq('id', request.id);
+
+        if (updateError) {
+          console.error('Error updating request:', updateError);
+          return;
+        }
+        
+        // Create a notification for the employee (if notifications table exists)
+        const message = `Your ${request.type} request for ${dateField} has been ${status}.`;
+        await supabaseClient
+          .from('notifications')
+          .insert([{
+            user_id: request.user_id,
+            message: message,
+            is_read: false
+          }]);
+
         fetchRequests(); // Refresh the list of pending requests
     } catch (error) {
         console.error(`Error updating request:`, error);

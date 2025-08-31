@@ -6,7 +6,6 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal, Butt
 import { useAuth } from '../../../context/AuthContext';
 import { useDatabase } from '../../../context/DatabaseContext';
 import { useRouter } from 'expo-router';
-import { validateRequest, ValidationResult } from '../../../utils/validation';
 import { Colors, Sizing, Typography } from '../../../theme/theme';
 import { FontAwesome5 } from '@expo/vector-icons';
 // Note: For a real app, you'd install this with `npm install @react-native-community/datetimepicker`
@@ -18,7 +17,7 @@ export default function LeaveRequestScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [reason, setReason] = useState('');
   const { user } = useAuth();
-  const { db } = useDatabase();
+  const { supabaseClient } = useDatabase();
   const router = useRouter();
 
   const onDateChange = (event: any, selectedDate?: Date) => {
@@ -33,28 +32,34 @@ export default function LeaveRequestScreen() {
       Alert.alert('Error', 'Please provide a reason for your leave.');
       return;
     }
-    if (!db || !user) {
+    if (!supabaseClient || !user) {
       Alert.alert('Error', 'Database or user not available.');
       return;
     }
 
     try {
-      const validationResult: ValidationResult = await validateRequest(db, user.id, formattedDate);
-      if (!validationResult.passed) {
-          Alert.alert('Validation Failed', validationResult.message);
-          return;
-      }
+      const { data, error } = await supabaseClient
+        .from('leave_requests')
+        .insert([
+          {
+            user_id: user.id,
+            start_date: formattedDate,
+            end_date: formattedDate,
+            reason: reason,
+          }
+        ]);
 
-      await db.runAsync(
-        'INSERT INTO leave_requests (user_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, ?);',
-        user.id, formattedDate, formattedDate, reason, 'pending'
-      );
+      if (error) {
+        console.error('Error submitting leave request:', error);
+        Alert.alert('Error', 'Failed to submit leave request.');
+        return;
+      }
 
       Alert.alert('Success', 'Your leave request has been submitted.');
       router.back();
     } catch (error) {
       console.error('Error submitting leave request:', error);
-      Alert.alert('Error', 'Failed to submit request.');
+      Alert.alert('Error', 'Failed to submit leave request.');
     }
   };
 

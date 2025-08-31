@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -48,8 +47,8 @@ const statusIcons = {
 };
 
 export default function RequestHistoryScreen() {
-  const { db } = useDatabase();
   const { user } = useAuth();
+  const { supabaseClient } = useDatabase();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,56 +57,108 @@ export default function RequestHistoryScreen() {
   const isHOD = user?.role === 'HOD';
 
   const fetchRequests = useCallback(async () => {
-    if (!db || !user || !isHOD) return;
+    if (!supabaseClient || !user || !isHOD) return;
 
     setLoading(true);
     try {
-      // Get leave requests
-      const leaveRequests = await db.getAllAsync(
-        `SELECT lr.*, u.username, 'Leave' as type FROM leave_requests lr 
-         JOIN users u ON lr.user_id = u.id 
-         WHERE lr.status IN ('approved', 'rejected')
-         ORDER BY lr.created_at DESC`
-      ) as RequestItem[];
+      // Fetch leave requests
+      const leaveRequestsQuery = supabaseClient.from('leave_requests')
+        .select('*, users (username)')
+        .in('status', ['approved', 'rejected'])
+        .order('created_at', { ascending: false });
+      
+      const { data: leaveRequestsData, error: leaveRequestsError } = await leaveRequestsQuery;
+      if (leaveRequestsError) throw leaveRequestsError;
 
-      // Get permission requests
-      const permissionRequests = await db.getAllAsync(
-        `SELECT pr.*, u.username, 'Permission' as type FROM permission_requests pr 
-         JOIN users u ON pr.user_id = u.id 
-         WHERE pr.status IN ('approved', 'rejected')
-         ORDER BY pr.created_at DESC`
-      ) as RequestItem[];
+      const leaveRequests = leaveRequestsData.map(lr => ({
+        ...lr,
+        username: lr.users?.username,
+        type: 'Leave',
+        user_id: lr.user_id,
+        created_at: lr.created_at,
+        status: lr.status,
+        start_date: lr.start_date,
+        end_date: lr.end_date,
+        reason: lr.reason,
+        id: lr.id,
+      })) as RequestItem[];
 
-      // Get shift requests
-      const shiftRequests = await db.getAllAsync(
-        `SELECT sr.*, u.username, 'Shift' as type FROM shift_requests sr 
-         JOIN users u ON sr.user_id = u.id 
-         WHERE sr.status IN ('approved', 'rejected')
-         ORDER BY sr.created_at DESC`
-      ) as RequestItem[];
+      // Fetch permission requests
+      const permissionRequestsQuery = supabaseClient.from('permission_requests')
+        .select('*, users (username)')
+        .in('status', ['approved', 'rejected'])
+        .order('created_at', { ascending: false });
 
-      // Get shift swap requests
-      const shiftSwapRequests = await db.getAllAsync(
-        `SELECT ss.*, ur.username, 'Shift Swap' as type, 
-                ut.username as target_username,
-                ss.requester_shift, ss.target_shift,
-                ss.requester_id as user_id
-         FROM shift_swaps ss 
-         JOIN users ur ON ss.requester_id = ur.id 
-         JOIN users ut ON ss.target_id = ut.id
-         WHERE ss.status IN ('approved', 'rejected') 
-         ORDER BY ss.created_at DESC`
-      ) as RequestItem[];
+      const { data: permissionRequestsData, error: permissionRequestsError } = await permissionRequestsQuery;
+      if (permissionRequestsError) throw permissionRequestsError;
 
-      // Get old requests from the legacy table (no created_at column)
-      const oldRequests = await db.getAllAsync(
-        `SELECT r.*, u.username, r.date as created_at FROM requests r 
-         JOIN users u ON r.user_id = u.id 
-         WHERE r.status IN ('approved', 'rejected')
-         ORDER BY r.id DESC`
-      ) as RequestItem[];
+      const permissionRequests = permissionRequestsData.map(pr => ({
+        ...pr,
+        username: pr.users?.username,
+        type: 'Permission',
+        user_id: pr.user_id,
+        created_at: pr.created_at,
+        status: pr.status,
+        date: pr.date,
+        start_time: pr.start_time,
+        end_time: pr.end_time,
+        reason: pr.reason,
+        id: pr.id,
+      })) as RequestItem[];
 
-      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests, ...oldRequests]
+      // Fetch shift requests
+      const shiftRequestsQuery = supabaseClient.from('shift_requests')
+        .select('*, users (username)')
+        .in('status', ['approved', 'rejected'])
+        .order('created_at', { ascending: false });
+
+      const { data: shiftRequestsData, error: shiftRequestsError } = await shiftRequestsQuery;
+      if (shiftRequestsError) throw shiftRequestsError;
+
+      const shiftRequests = shiftRequestsData.map(sr => ({
+        ...sr,
+        username: sr.users?.username,
+        type: 'Shift',
+        user_id: sr.user_id,
+        created_at: sr.created_at,
+        status: sr.status,
+        date: sr.date,
+        current_shift: sr.current_shift,
+        requested_shift: sr.requested_shift,
+        reason: sr.reason,
+        id: sr.id,
+      })) as RequestItem[];
+
+      // Fetch shift swap requests
+      const shiftSwapRequestsQuery = supabaseClient.from('shift_swaps')
+        .select('*, requester:users (username), target:users!target_id (username)')
+        .in('status', ['approved', 'rejected'])
+        .order('created_at', { ascending: false });
+
+      const { data: shiftSwapRequestsData, error: shiftSwapRequestsError } = await shiftSwapRequestsQuery;
+      if (shiftSwapRequestsError) throw shiftSwapRequestsError;
+
+      const shiftSwapRequests = shiftSwapRequestsData.map(ssr => ({
+        ...ssr,
+        username: ssr.requester?.username,
+        target_username: ssr.target?.username,
+        type: 'Shift Swap',
+        user_id: ssr.requester_id,
+        created_at: ssr.created_at,
+        status: ssr.status,
+        date: ssr.date,
+        requester_shift: ssr.requester_shift,
+        target_shift: ssr.target_shift,
+        reason: ssr.reason,
+        id: ssr.id,
+      })) as RequestItem[];
+      
+      // Fetch old requests from the legacy table (if any, assuming it's not migrated yet)
+      // This part would need adjustment based on how legacy data is handled or migrated.
+      // For now, we'll assume legacy data is either migrated or not required in this view.
+      // If legacy data needs to be fetched, a similar Supabase query would be needed for that table.
+
+      const allRequests = [...leaveRequests, ...permissionRequests, ...shiftRequests, ...shiftSwapRequests]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setRequests(allRequests);
@@ -117,7 +168,7 @@ export default function RequestHistoryScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [db, user, isHOD]);
+  }, [supabaseClient, user, isHOD]);
 
   useFocusEffect(
     useCallback(() => {

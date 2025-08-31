@@ -17,7 +17,7 @@ export default function PermissionRequestScreen() {
   const [endTime, setEndTime] = useState('17:00');
   const [reason, setReason] = useState('');
   const { user } = useAuth();
-  const { db } = useDatabase();
+  const { supabaseClient } = useDatabase();
   const router = useRouter();
 
   const onDateChange = (event: any, selectedDate?: Date) => {
@@ -32,9 +32,35 @@ export default function PermissionRequestScreen() {
       Alert.alert('Error', 'Please provide a reason for your permission request.');
       return;
     }
-    if (!db || !user) {
-      Alert.alert('Error', 'Database or user not available.');
+    if (!user) {
+      Alert.alert('Error', 'User not available.');
       return;
+    }
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('permission_requests')
+        .insert([
+          {
+            user_id: user.id,
+            date: formattedDate,
+            start_time: startTime,
+            end_time: endTime,
+            reason: reason,
+          }
+        ]);
+
+      if (error) {
+        console.error('Error submitting permission request:', error);
+        Alert.alert('Error', 'Failed to submit permission request.');
+        return;
+      }
+
+      Alert.alert('Success', 'Permission request submitted successfully!');
+      router.back();
+    } catch (error) {
+      console.error('Error submitting permission request:', error);
+      Alert.alert('Error', 'Failed to submit permission request.');
     }
 
     try {
