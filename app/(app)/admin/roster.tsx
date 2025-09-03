@@ -1,10 +1,11 @@
+
 // File: app/(app)/admin/roster.tsx
 // A user-friendly screen for HODs to manage the duty roster directly in the app.
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, FlatList, TouchableOpacity } from 'react-native';
-import { useDatabase } from '../../../context/DatabaseContext';
 import { Picker } from '@react-native-picker/picker';
+import { supabase } from '../../../lib/supabase';
 
 // Define a specific type for shift values for type safety
 type ShiftType = 'Morning' | 'Evening' | 'Night' | 'Off';
@@ -12,49 +13,53 @@ type ShiftType = 'Morning' | 'Evening' | 'Night' | 'Off';
 const SHIFT_TYPES: ShiftType[] = ['Morning', 'Evening', 'Night', 'Off'];
 
 interface Employee {
-  id: number;
+  id: string;
   username: string;
 }
 
 interface RosterEntry {
-  user_id: number;
+  user_id: string;
   shift_type: string;
 }
 
 export default function RosterManagementScreen() {
-  const { db } = useDatabase();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [roster, setRoster] = useState<Record<number, string>>({});
+  const [roster, setRoster] = useState<Record<string, string>>({});
 
   const fetchEmployees = useCallback(async () => {
-    if (!db) return;
     try {
-      const result = await db.getAllAsync<Employee>(
-        "SELECT id, username FROM users WHERE role = 'Employee';"
-      );
-      setEmployees(result);
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username')
+        .eq('role', 'Employee');
+
+      if (error) throw error;
+      setEmployees(data || []);
     } catch (error) {
       console.error("Error fetching employees:", error);
     }
-  }, [db]);
+  }, []);
 
   const fetchRosterForDate = useCallback(async () => {
-    if (!db || !date) return;
+    if (!date) return;
     try {
-      const result = await db.getAllAsync<RosterEntry>(
-        'SELECT user_id, shift_type FROM duty_roster WHERE date = ?;',
-        date
-      );
-      const newRoster: Record<number, string> = {};
-      result.forEach(item => {
+      const { data, error } = await supabase
+        .from('duty_roster')
+        .select('user_id, shift_type')
+        .eq('date', date);
+
+      if (error) throw error;
+
+      const newRoster: Record<string, string> = {};
+      (data || []).forEach(item => {
         newRoster[item.user_id] = item.shift_type;
       });
       setRoster(newRoster);
     } catch (error) {
       console.error("Error fetching roster for date:", error);
     }
-  }, [db, date]);
+  }, [date]);
 
   useEffect(() => {
     fetchEmployees();
@@ -64,7 +69,7 @@ export default function RosterManagementScreen() {
     fetchRosterForDate();
   }, [fetchRosterForDate]);
 
-  const handleShiftChange = (userId: number, shiftType: ShiftType) => {
+  const handleShiftChange = (userId: string, shiftType: ShiftType) => {
     setRoster(prevRoster => ({
       ...prevRoster,
       [userId]: shiftType,
@@ -72,22 +77,26 @@ export default function RosterManagementScreen() {
   };
 
   const handleSaveChanges = async () => {
-    if (!db) {
-      Alert.alert("Error", "Database not ready.");
-      return;
-    }
     try {
-      await db.withTransactionAsync(async () => {
-        for (const employee of employees) {
-          const shiftType = roster[employee.id] || 'Off';
-          await db.runAsync(
-            `REPLACE INTO duty_roster (user_id, date, shift_type) VALUES (?, ?, ?);`,
-            employee.id,
-            date,
-            shiftType
-          );
-        }
-      });
+      // Delete existing entries for this date
+      await supabase
+        .from('duty_roster')
+        .delete()
+        .eq('date', date);
+
+      // Insert new entries
+      const rosterEntries = employees.map(employee => ({
+        user_id: employee.id,
+        date: date,
+        shift_type: roster[employee.id] || 'Off'
+      }));
+
+      const { error } = await supabase
+        .from('duty_roster')
+        .insert(rosterEntries);
+
+      if (error) throw error;
+
       Alert.alert("Success", `Roster for ${date} has been saved.`);
     } catch (error) {
       console.error("Error saving roster:", error);

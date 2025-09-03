@@ -8,7 +8,6 @@ export default function AdminLayout() {
     <Stack>
       <Stack.Screen name="limits" options={{ title: 'Set Monthly Limits' }} />
       <Stack.Screen name="roster" options={{ title: 'Manage Duty Roster' }} />
-      <Stack.Screen name="attendance" options={{ title: 'Employee Attendance' }} />
     </Stack>
   );
 }

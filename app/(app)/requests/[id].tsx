@@ -4,9 +4,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
-import { useDatabase } from '../../../context/DatabaseContext';
 import { Colors, Sizing, Typography } from '../../../theme/theme';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import { supabase } from '../../../lib/supabase';
 
 interface RequestDetails {
   id: number;
@@ -31,7 +31,6 @@ interface RequestDetails {
 export default function RequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { db } = useDatabase();
   const router = useRouter();
   const [request, setRequest] = useState<RequestDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,10 +43,10 @@ export default function RequestDetailScreen() {
       return;
     }
     fetchRequestDetails();
-  }, [id, db, isHOD]);
+  }, [id, isHOD]);
 
   const fetchRequestDetails = async () => {
-    if (!db || !id) return;
+    if (!id) return;
     
     setLoading(true);
     try {
@@ -56,42 +55,53 @@ export default function RequestDetailScreen() {
         { table: 'leave_requests', type: 'Leave' },
         { table: 'permission_requests', type: 'Permission' },
         { table: 'shift_requests', type: 'Shift' },
-        { table: 'shift_swaps', type: 'Shift Swap' },
-        { table: 'requests', type: 'General' }
+        { table: 'shift_swaps', type: 'Shift Swap' }
       ];
 
       let foundRequest: RequestDetails | null = null;
 
       for (const { table, type } of tables) {
-        let query = '';
-        let queryParams = [];
-        
         if (table === 'shift_swaps') {
-          query = `
-            SELECT ss.*, ur.username, ut.username as target_username, 
-                   ss.requester_shift, ss.target_shift, ss.reason,
-                   ss.requester_id as user_id, '${type}' as type,
-                   ss.date
-            FROM ${table} ss 
-            JOIN users ur ON ss.requester_id = ur.id 
-            JOIN users ut ON ss.target_id = ut.id
-            WHERE ss.id = ? AND ss.status = 'pending_hod_approval'
-          `;
-          queryParams = [id];
+          const { data, error } = await supabase
+            .from(table)
+            .select(`
+              *,
+              requester:users!requester_id(username),
+              target:users!target_id(username)
+            `)
+            .eq('id', id)
+            .eq('status', 'pending_hod_approval')
+            .single();
+
+          if (!error && data) {
+            foundRequest = {
+              ...data,
+              type,
+              username: data.requester?.username,
+              target_username: data.target?.username,
+              user_id: data.requester_id
+            };
+            break;
+          }
         } else {
-          query = `
-            SELECT r.*, u.username, '${type}' as type 
-            FROM ${table} r 
-            JOIN users u ON r.user_id = u.id 
-            WHERE r.id = ? AND r.status = 'pending'
-          `;
-          queryParams = [id];
-        }
-        
-        const result = await db.getAllAsync<RequestDetails>(query, queryParams);
-        if (result.length > 0) {
-          foundRequest = result[0];
-          break;
+          const { data, error } = await supabase
+            .from(table)
+            .select(`
+              *,
+              users(username)
+            `)
+            .eq('id', id)
+            .eq('status', 'pending')
+            .single();
+
+          if (!error && data) {
+            foundRequest = {
+              ...data,
+              type,
+              username: data.users?.username
+            };
+            break;
+          }
         }
       }
 
@@ -114,9 +124,9 @@ export default function RequestDetailScreen() {
   };
 
   const updateRequestStatus = async (status: 'approved' | 'rejected') => {
-    if (!db || !request) {
-      console.log('Missing database or request:', { hasDb: !!db, hasRequest: !!request });
-      Alert.alert('Error', 'Database or request information is missing.');
+    if (!request) {
+      console.log('Missing request:', { hasRequest: !!request });
+      Alert.alert('Error', 'Request information is missing.');
       return;
     }
 
@@ -141,23 +151,33 @@ export default function RequestDetailScreen() {
       console.log('Using table:', tableName);
 
       // Update request status
-      const updateResult = await db.runAsync(
-        `UPDATE ${tableName} SET status = ? WHERE id = ?`,
-        [status, request.id]
-      );
+      const { error: updateError } = await supabase
+        .from(tableName)
+        .update({ status })
+        .eq('id', request.id);
 
-      console.log('Update result:', updateResult);
+      if (updateError) {
+        throw updateError;
+      }
+
+      console.log('Update successful');
 
       // Create notification
       const dateField = request.start_date || request.date || 'N/A';
       const message = `Your ${request.type.toLowerCase()} request for ${dateField} has been ${status}.`;
       
       try {
-        const notificationResult = await db.runAsync(
-          'INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, datetime("now"))',
-          [request.user_id, message]
-        );
-        console.log('Notification result:', notificationResult);
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: request.user_id,
+            message,
+            created_at: new Date().toISOString()
+          });
+
+        if (notificationError) {
+          console.error('Failed to create notification:', notificationError);
+        }
       } catch (notificationError) {
         console.error('Failed to create notification:', notificationError);
         // Continue even if notification fails - the main action succeeded

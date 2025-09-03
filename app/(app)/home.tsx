@@ -1,16 +1,106 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { Colors, Sizing, Typography } from '../../theme/theme';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { supabase } from '../../lib/supabase';
 
 export default function Home() {
   const { user } = useAuth();
   const router = useRouter();
   const isHOD = user?.role === 'HOD';
+  
+  const [stats, setStats] = useState({
+    activeRequests: 0,
+    leavesTaken: 0,
+    pendingCount: 0
+  });
+
+  useEffect(() => {
+    if (user) {
+      fetchUserStats();
+    }
+  }, [user]);
+
+  const fetchUserStats = async () => {
+    if (!user) return;
+
+    try {
+      if (isHOD) {
+        // For HOD: Show all system-wide statistics
+        const [
+          { data: allPendingLeave },
+          { data: allPendingPermission },
+          { data: allPendingShift },
+          { data: allPendingSwaps },
+          { data: allUsers },
+          { data: todayRequests }
+        ] = await Promise.all([
+          supabase.from('leave_requests').select('*').eq('status', 'pending'),
+          supabase.from('permission_requests').select('*').eq('status', 'pending'),
+          supabase.from('shift_requests').select('*').eq('status', 'pending'),
+          supabase.from('shift_swaps').select('*').eq('status', 'pending_hod_approval'),
+          supabase.from('users').select('*').eq('role', 'Employee'),
+          supabase.from('leave_requests').select('*').eq('start_date', new Date().toISOString().split('T')[0])
+        ]);
+
+        const totalPendingRequests = (allPendingLeave?.length || 0) + 
+                                   (allPendingPermission?.length || 0) + 
+                                   (allPendingShift?.length || 0) + 
+                                   (allPendingSwaps?.length || 0);
+
+        setStats({
+          activeRequests: totalPendingRequests,
+          leavesTaken: allUsers?.length || 0,
+          pendingCount: todayRequests?.length || 0
+        });
+      } else {
+        // For Employee: Show their personal statistics
+        // Fetch all leave requests for this user
+        const { data: allLeaveRequests } = await supabase
+          .from('leave_requests')
+          .select('*')
+          .eq('user_id', user.id);
+
+        // Fetch pending requests count
+        const [
+          { data: pendingLeave },
+          { data: pendingPermission },
+          { data: pendingShift },
+          { data: pendingSwaps }
+        ] = await Promise.all([
+          supabase.from('leave_requests').select('*').eq('user_id', user.id).eq('status', 'pending'),
+          supabase.from('permission_requests').select('*').eq('user_id', user.id).eq('status', 'pending'),
+          supabase.from('shift_requests').select('*').eq('user_id', user.id).eq('status', 'pending'),
+          supabase.from('shift_swaps').select('*').or(`requester_id.eq.${user.id},target_id.eq.${user.id}`).in('status', ['pending_target_approval', 'pending_hod_approval'])
+        ]);
+
+        const totalPending = (pendingLeave?.length || 0) + 
+                            (pendingPermission?.length || 0) + 
+                            (pendingShift?.length || 0) + 
+                            (pendingSwaps?.length || 0);
+
+        // Calculate total approved leave days taken (only count approved requests)
+        const approvedLeaveRequests = allLeaveRequests?.filter(request => request.status === 'approved') || [];
+        const totalLeaveDays = approvedLeaveRequests.length;
+
+        // For active requests, show pending requests (these are active until approved/rejected)
+        const activeRequests = totalPending;
+
+        setStats({
+          activeRequests: activeRequests,
+          leavesTaken: totalLeaveDays,
+          pendingCount: totalPending
+        });
+      }
+
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    }
+  };
 
   const QuickActionCard = ({ 
     icon, 
@@ -56,23 +146,47 @@ export default function Home() {
         </View>
 
         <View style={styles.statsContainer}>
-          <Animated.View entering={FadeIn.duration(800)} style={styles.statCard}>
-            <FontAwesome5 name="calendar-check" size={32} color={Colors.success} />
-            <Text style={styles.statNumber}>22</Text>
-            <Text style={styles.statLabel}>Days Present</Text>
-          </Animated.View>
-          
-          <Animated.View entering={FadeIn.duration(900)} style={styles.statCard}>
-            <FontAwesome5 name="calendar-times" size={32} color={Colors.warning} />
-            <Text style={styles.statNumber}>3</Text>
-            <Text style={styles.statLabel}>Leaves Taken</Text>
-          </Animated.View>
-          
-          <Animated.View entering={FadeIn.duration(1000)} style={styles.statCard}>
-            <FontAwesome5 name="clock" size={32} color={Colors.info} />
-            <Text style={styles.statNumber}>5</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </Animated.View>
+          {isHOD ? (
+            <>
+              <Animated.View entering={FadeIn.duration(800)} style={styles.statCard}>
+                <FontAwesome5 name="exclamation-circle" size={32} color={Colors.warning} />
+                <Text style={styles.statNumber}>{stats.activeRequests}</Text>
+                <Text style={styles.statLabel}>Pending Approvals</Text>
+              </Animated.View>
+              
+              <Animated.View entering={FadeIn.duration(900)} style={styles.statCard}>
+                <FontAwesome5 name="users" size={32} color={Colors.info} />
+                <Text style={styles.statNumber}>{stats.leavesTaken}</Text>
+                <Text style={styles.statLabel}>Total Employees</Text>
+              </Animated.View>
+              
+              <Animated.View entering={FadeIn.duration(1000)} style={styles.statCard}>
+                <FontAwesome5 name="calendar-day" size={32} color={Colors.success} />
+                <Text style={styles.statNumber}>{stats.pendingCount}</Text>
+                <Text style={styles.statLabel}>Today's Leaves</Text>
+              </Animated.View>
+            </>
+          ) : (
+            <>
+              <Animated.View entering={FadeIn.duration(800)} style={styles.statCard}>
+                <FontAwesome5 name="calendar-check" size={32} color={Colors.success} />
+                <Text style={styles.statNumber}>{stats.activeRequests}</Text>
+                <Text style={styles.statLabel}>Active Requests</Text>
+              </Animated.View>
+              
+              <Animated.View entering={FadeIn.duration(900)} style={styles.statCard}>
+                <FontAwesome5 name="calendar-times" size={32} color={Colors.warning} />
+                <Text style={styles.statNumber}>{stats.leavesTaken}</Text>
+                <Text style={styles.statLabel}>Leaves Taken</Text>
+              </Animated.View>
+              
+              <Animated.View entering={FadeIn.duration(1000)} style={styles.statCard}>
+                <FontAwesome5 name="clock" size={32} color={Colors.info} />
+                <Text style={styles.statNumber}>{stats.pendingCount}</Text>
+                <Text style={styles.statLabel}>Pending</Text>
+              </Animated.View>
+            </>
+          )}
         </View>
 
         <View style={styles.quickActionsSection}>
@@ -88,13 +202,7 @@ export default function Home() {
                   onPress={() => router.push('/requests')}
                   color={Colors.primary}
                 />
-                <QuickActionCard
-                  icon="users"
-                  title="Employee Attendance"
-                  description="View attendance records"
-                  onPress={() => router.push('/admin/attendance')}
-                  color={Colors.secondary}
-                />
+                
                 <QuickActionCard
                   icon="calendar-alt"
                   title="Duty Roster"

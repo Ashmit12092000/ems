@@ -71,16 +71,6 @@ CREATE TABLE IF NOT EXISTS duty_roster (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create attendance table
-CREATE TABLE IF NOT EXISTS attendance (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  date DATE NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('Present', 'Absent', 'Leave')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, date)
-);
-
 -- Create notifications table
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -110,7 +100,6 @@ ALTER TABLE permission_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shift_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shift_swaps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE duty_roster ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies (basic ones - you can customize based on your needs)
